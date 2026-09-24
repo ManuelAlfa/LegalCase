@@ -1,20 +1,83 @@
-# ---------------------------------------------------------------------
-# Compilación .NET
-# ---------------------------------------------------------------------
+# .gitignore de un repositorio políglota: .NET (Api, Worker, Web,
+# Infrastructure) + microservicios Python (services/ocr-paddle,
+# services/doc-classifier) + infraestructura en Docker.
+#
+# Criterio, para no tener que decidirlo caso por caso: se versiona el
+# código fuente y los ficheros de texto pequeños que describen el proyecto.
+# Queda fuera todo lo que sea (a) generado por una compilación o una
+# ejecución, (b) descargado y reproducible desde un fichero de
+# dependencias, (c) propio de una máquina o un editor concretos, o (d)
+# grande y binario.
+
+# =====================================================================
+# .NET
+# =====================================================================
 bin/
 obj/
 *.user
 *.suo
+*.userprefs
 .vs/
-.idea/
+artifacts/
+# Paquetes restaurados por NuGet dentro del repositorio (poco habitual,
+# pero se descargan desde los .csproj, no hay que versionarlos).
+packages/
 
-# ---------------------------------------------------------------------
-# Datos de prueba: ~2,3 GB de PDFs de las pruebas de OCR (documentos de
-# 500 y 928 páginas, escaneos degradados, resultados intermedios). Son
-# ficheros generados o descargados, no fuente del proyecto: se quedan
-# fuera del repositorio. Sí se conservan los .md y .sql de esas carpetas,
-# que documentan cómo se obtuvieron y qué se midió.
-# ---------------------------------------------------------------------
+# =====================================================================
+# Python (services/)
+#
+# Los microservicios se ejecutan normalmente dentro de sus contenedores,
+# donde las dependencias se instalan desde requirements.txt. Estas reglas
+# cubren el caso de ejecutarlos o depurarlos de forma nativa en el host.
+# =====================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+# Entornos virtuales, con los nombres habituales.
+.venv/
+venv/
+ENV/
+# Cachés de herramientas de prueba y análisis.
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+# Ficheros de entrada/salida de las pruebas manuales del servicio de OCR.
+services/ocr-paddle/_tmp_input/
+services/ocr-paddle/_tmp_output/
+
+# =====================================================================
+# Modelos, pesos y dependencias descargadas
+#
+# Los modelos de PaddleOCR viven en un volumen de Docker
+# (ocr_paddle_models:/root/.paddlex), no en el árbol del repositorio. Estas
+# reglas evitan que acaben dentro si alguien los descarga a mano, y cubren
+# los pesos de los modelos evaluados para mejorar el OCR (Real-ESRGAN,
+# DocRes, SBB), que pesan cientos de MB y se traen aparte.
+# =====================================================================
+**/checkpoints/
+*.pkl
+*.pth
+*.onnx
+*.safetensors
+*.h5
+# Wheels traídos a mano para instalar sin red (ver
+# test-data/resultados/METODO_descarga_externa_wsl2.md).
+*-wheels/
+*.whl
+
+# =====================================================================
+# Datos de prueba
+#
+# ~2,3 GB de PDFs de las pruebas reales de OCR (documentos de 500 y 928
+# páginas, escaneos degradados, PDFs de resultado) y sus imágenes. Son
+# ficheros generados o descargados, no fuente. Se conservan los .md y .sql
+# de esas mismas carpetas, que documentan cómo se obtuvieron y qué se
+# midió en cada prueba.
+# =====================================================================
 test-data/**
 !test-data/
 !test-data/**/
@@ -22,39 +85,53 @@ test-data/**
 !test-data/**/*.sql
 
 .scratch_gaceta/
-services/ocr-paddle/_tmp_output/
-services/ocr-paddle/_tmp_input/
 
-# Salidas de pruebas puntuales
+# =====================================================================
+# Herramientas de front-end y utilidades
+# =====================================================================
+node_modules/
+# package-lock.json NO se ignora a propósito: si algún día se añade una
+# herramienta de Node, el fichero de bloqueo debe versionarse para que
+# todos instalen exactamente las mismas versiones.
+# Capturas y artefactos de las comprobaciones con navegador.
+playwright-report/
+test-results/
+
+# =====================================================================
+# Empaquetados y volcados generados del propio proyecto
+# =====================================================================
+src.tar.gz
+*.zip
+*.tar.gz
 *.tmp
 *.log
 
-# Python (microservicios de services/)
-__pycache__/
-*.pyc
-
-# Empaquetados generados del propio código
-src.tar.gz
-
-# Configuración local de herramientas del editor
+# =====================================================================
+# Editor, herramientas y sistema operativo
+#
+# .vscode NO se ignora entero: extensions.json y el script de instalación
+# de extensiones sí interesan al equipo. Solo se excluye lo propio de cada
+# máquina.
+# =====================================================================
+.vscode/settings.json
+.vscode/launch.json
+.vscode/*.local.json
+.idea/
 .claude/settings.local.json
+.DS_Store
+Thumbs.db
 
-# ---------------------------------------------------------------------
-# Modelos y pesos descargados (PaddleOCR, TensorFlow, DocRes): se bajan
-# en el arranque o se traen aparte, no se versionan.
-# ---------------------------------------------------------------------
-**/checkpoints/
-**/*.pkl
-**/*.pth
-**/*.onnx
-**/*.woff2.download
-
-# ---------------------------------------------------------------------
-# Secretos reales. Los appsettings.json del repositorio solo llevan
-# credenciales de desarrollo local (así está documentado en sus propios
-# comentarios); cualquier secreto de verdad va por user-secrets o variable
-# de entorno y nunca aquí.
-# ---------------------------------------------------------------------
+# =====================================================================
+# Secretos
+#
+# Los appsettings.json versionados llevan solo credenciales de desarrollo
+# local, y así consta en sus propios comentarios. Cualquier secreto real
+# (clave de OpenAI, SigningKey de producción) va por user-secrets o
+# variable de entorno, nunca en el repositorio.
+# =====================================================================
 appsettings.*.Local.json
+secrets.json
 *.pfx
+*.p12
 .env
+.env.*
