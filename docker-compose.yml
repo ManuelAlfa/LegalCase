@@ -11,12 +11,18 @@ services:
       POSTGRES_USER: legalcase
       POSTGRES_PASSWORD: legalcase_dev
     ports:
-      # 15432, no 5432: el puerto 5432 del host está bloqueado por algo
-      # invisible a `ss`/`docker port`/`fuser` (probable peculiaridad de
-      # red de WSL2, no identificado con certeza 2026-09-22) — Postgres
-      # sigue escuchando en 5432 DENTRO del contenedor, solo cambia el
-      # puerto del host. Si en otro entorno 5432 sí está libre, esto sigue
-      # funcionando igual (el mapeo es independiente del puerto interno).
+      # 15432, no 5432: la máquina anfitriona (Windows) ya tiene instalado
+      # y en marcha su propio PostgreSQL 18 (servicio postgresql-x64-18),
+      # escuchando en 0.0.0.0:5432. Como .wslconfig usa
+      # networkingMode=mirrored, WSL2 comparte el espacio de red de
+      # Windows y ese puerto está ocupado también para los contenedores.
+      # Por eso el conflicto era invisible a `ss`/`fuser`/`docker port`:
+      # el proceso dueño del puerto no es de Linux (causa identificada
+      # 2026-09-24). Dos servidores Postgres en un mismo host no pueden
+      # compartir puerto, así que publicar en otro es la solución normal,
+      # no un apaño. Postgres sigue escuchando en 5432 DENTRO del
+      # contenedor: solo cambia el puerto del host, y en un entorno sin
+      # ese conflicto esto funciona igual.
       - "15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data

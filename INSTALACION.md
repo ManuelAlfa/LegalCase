@@ -262,16 +262,31 @@ que se sube un archivo; no hay que prepararlo.
 
 ## 6. Problemas conocidos
 
-**El puerto 5432 está ocupado y Postgres no arranca.**
-En esta máquina de desarrollo el 5432 está retenido por algo que no aparece
-ni en `ss`, ni en `docker port`, ni en `fuser`, así que Postgres se publica en
-el **15432** y las cadenas de conexión apuntan ahí. Si en tu máquina el 5432
-está libre y prefieres el puerto estándar, cambia el mapeo en
-`docker-compose.yml` y el puerto en estos tres sitios:
+**Por qué Postgres se publica en el 15432 y no en el 5432.**
+Porque la máquina de desarrollo original ya tiene su propio PostgreSQL
+instalado en Windows (servicio `postgresql-x64-18`, con pgAdmin), escuchando
+en `0.0.0.0:5432`. Dos servidores Postgres en un mismo host no pueden
+compartir puerto.
+
+Lo que hace este caso confuso en WSL2 es que el conflicto es **invisible
+desde Linux**: con `networkingMode=mirrored` en `.wslconfig`, WSL2 comparte
+el espacio de red de Windows, así que el puerto está ocupado para los
+contenedores, pero `ss`, `fuser` y `docker port` no encuentran nada, porque
+buscan un proceso de Linux y el dueño del puerto es un proceso de Windows.
+Para verlo hay que preguntárselo a Windows:
+
+```bash
+powershell.exe -NoProfile -Command "Get-NetTCPConnection -LocalPort 5432 -State Listen"
+```
+
+Si en tu máquina el 5432 está libre y prefieres el puerto estándar, cambia el
+mapeo en `docker-compose.yml` y el puerto en estos tres sitios:
 `src/Api/appsettings.json`, `src/Worker/appsettings.json` y
 `src/Infrastructure/Persistence/AppDbContextFactory.cs`.
-La causa real del bloqueo sigue sin identificarse; el cambio de puerto es un
-rodeo, no un diagnóstico.
+
+Efecto secundario útil de `mirrored`: el 15432 también es accesible desde
+Windows, así que un pgAdmin instalado allí puede conectarse a la base de
+datos del proyecto en `localhost:15432` sin configurar nada más.
 
 **En WSL2, los contenedores no resuelven DNS o no se puede acceder a un puerto
 publicado.**
