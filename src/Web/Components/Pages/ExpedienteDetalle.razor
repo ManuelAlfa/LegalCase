@@ -1,0 +1,106 @@
+@* Ficha de expediente. La versión completa con pestañas (Datos generales,
+   Partes, Plazos/Actuaciones, Documentos, Facturación) es la tarea 6.4;
+   aquí se muestran ya los datos reales del expediente para que pulsar una
+   fila del listado no lleve a una pantalla vacía. *@
+@page "/expedientes/{Id:guid}"
+@using LegalCaseManagement.Domain.Entities
+@inject ExpedientesApiClient ExpedientesApiClient
+@inject MateriasApiClient MateriasApiClient
+
+<PageTitle>@(_expediente?.Titulo ?? "Expediente") — Compás</PageTitle>
+
+<div class="cps-crumbs">
+    <a href="/expedientes">Expedientes</a> ·
+    <span class="current">@(_expediente?.Titulo ?? "…")</span>
+</div>
+
+@if (_cargando)
+{
+    <div class="cps-card"><p class="cps-vacio">Cargando expediente…</p></div>
+}
+else if (_error is not null)
+{
+    <div class="cps-alert-error" role="alert">
+        <svg class="icon" style="width:16px;height:16px"><use href="#i-x" /></svg>
+        @_error
+    </div>
+}
+else if (_expediente is null)
+{
+    <div class="cps-card">
+        <p class="cps-vacio">No existe ningún expediente con ese identificador en este despacho.</p>
+    </div>
+}
+else
+{
+    <div class="cps-pagehead">
+        <h1>@_expediente.Titulo</h1>
+        <span class="cps-chip @Presentacion.ClaseChipEstado(_expediente.Estado)">
+            @Presentacion.TextoEstado(_expediente.Estado)
+        </span>
+    </div>
+
+    <div class="cps-card">
+        <h3>Datos generales</h3>
+        <dl class="cps-datos">
+            <div><dt>Cliente</dt><dd>@_expediente.Cliente</dd></div>
+            <div><dt>Materia</dt><dd>@_nombreMateria</dd></div>
+            <div><dt>Fecha de apertura</dt><dd>@Presentacion.FechaCorta(_expediente.FechaApertura) de @_expediente.FechaApertura.Year</dd></div>
+            <div>
+                <dt>Fecha de cierre</dt>
+                <dd>@(_expediente.FechaCierre is { } cierre
+                        ? $"{Presentacion.FechaCorta(cierre)} de {cierre.Year}"
+                        : "— (sigue abierto)")</dd>
+            </div>
+            <div><dt>Último folio asignado</dt><dd class="tabular">@_expediente.UltimoFolio</dd></div>
+        </dl>
+    </div>
+
+    <div class="cps-card">
+        <div class="cps-pendiente">
+            <svg class="icon" style="width:16px;height:16px"><use href="#i-files" /></svg>
+            <span>
+                Las pestañas de <b>Partes</b>, <b>Plazos y actuaciones</b>, <b>Documentos</b> y
+                <b>Facturación</b> son la tarea 6.4 del plan de desarrollo, todavía no construida.
+            </span>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool _cargando = true;
+    private string? _error;
+    private Expediente? _expediente;
+    private string _nombreMateria = "—";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _cargando = true;
+        _error = null;
+
+        try
+        {
+            // La Api no expone todavía GET /api/expedientes/{id}: se busca
+            // sobre el listado del tenant, que ya viene filtrado por RLS.
+            var expedientesTask = ExpedientesApiClient.ListarAsync();
+            var materiasTask = MateriasApiClient.ListarAsync();
+            await Task.WhenAll(expedientesTask, materiasTask);
+
+            _expediente = (await expedientesTask).FirstOrDefault(e => e.Id == Id);
+
+            _nombreMateria = _expediente?.MateriaId is { } materiaId
+                ? (await materiasTask).FirstOrDefault(m => m.Id == materiaId)?.Nombre ?? "—"
+                : "—";
+        }
+        catch (HttpRequestException)
+        {
+            _error = "No se pudo cargar el expediente. Comprueba que la Api esté en marcha y que la sesión siga siendo válida.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+}

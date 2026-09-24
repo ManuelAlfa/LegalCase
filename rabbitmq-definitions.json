@@ -1,0 +1,26 @@
+{
+  "users": [
+    {
+      "name": "legalcase",
+      "password": "legalcase_dev",
+      "tags": ["administrator"]
+    },
+    {
+      "name": "admin",
+      "password": "admin_dev",
+      "tags": ["administrator"]
+    }
+  ],
+  "vhosts": [
+    { "name": "/" }
+  ],
+  "permissions": [
+    {
+      "user": "legalcase",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ]
+}

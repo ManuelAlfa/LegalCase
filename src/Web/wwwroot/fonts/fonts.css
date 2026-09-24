@@ -1,0 +1,60 @@
+/* Fraunces y Public Sans, auto-alojadas (no CDN de Google Fonts): cargar
+   fuentes desde Google en cada visita enviaría la IP de cada visitante a
+   Google, un problema real de RGPD en la UE — ver tarea 6.0 del plan de
+   desarrollo. Subconjunto "latin" (cubre español, incluye ñ/Ñ). */
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('Fraunces-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('Fraunces-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('Fraunces-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('PublicSans-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('PublicSans-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('PublicSans-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('PublicSans-variable.woff2') format('woff2');
+}

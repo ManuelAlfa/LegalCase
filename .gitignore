@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------
+# Compilación .NET
+# ---------------------------------------------------------------------
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+
+# ---------------------------------------------------------------------
+# Datos de prueba: ~2,3 GB de PDFs de las pruebas de OCR (documentos de
+# 500 y 928 páginas, escaneos degradados, resultados intermedios). Son
+# ficheros generados o descargados, no fuente del proyecto: se quedan
+# fuera del repositorio. Sí se conservan los .md y .sql de esas carpetas,
+# que documentan cómo se obtuvieron y qué se midió.
+# ---------------------------------------------------------------------
+test-data/**
+!test-data/
+!test-data/**/
+!test-data/**/*.md
+!test-data/**/*.sql
+
+.scratch_gaceta/
+services/ocr-paddle/_tmp_output/
+services/ocr-paddle/_tmp_input/
+
+# Salidas de pruebas puntuales
+*.tmp
+*.log
+
+# Python (microservicios de services/)
+__pycache__/
+*.pyc
+
+# Empaquetados generados del propio código
+src.tar.gz
+
+# Configuración local de herramientas del editor
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------
+# Modelos y pesos descargados (PaddleOCR, TensorFlow, DocRes): se bajan
+# en el arranque o se traen aparte, no se versionan.
+# ---------------------------------------------------------------------
+**/checkpoints/
+**/*.pkl
+**/*.pth
+**/*.onnx
+**/*.woff2.download
+
+# ---------------------------------------------------------------------
+# Secretos reales. Los appsettings.json del repositorio solo llevan
+# credenciales de desarrollo local (así está documentado en sus propios
+# comentarios); cualquier secreto de verdad va por user-secrets o variable
+# de entorno y nunca aquí.
+# ---------------------------------------------------------------------
+appsettings.*.Local.json
+*.pfx
+.env

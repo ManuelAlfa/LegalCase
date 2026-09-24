@@ -1,0 +1,376 @@
+services:
+  postgres:
+    # pgvector/pgvector:pg16 = postgres:16 + extensión pgvector precompilada
+    # (necesaria para Vector/FragmentoDocumento.Embedding). El postgres:16
+    # estándar no la trae.
+    image: pgvector/pgvector:pg16
+    container_name: legalcase-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: legalcase
+      POSTGRES_USER: legalcase
+      POSTGRES_PASSWORD: legalcase_dev
+    ports:
+      # 15432, no 5432: el puerto 5432 del host está bloqueado por algo
+      # invisible a `ss`/`docker port`/`fuser` (probable peculiaridad de
+      # red de WSL2, no identificado con certeza 2026-09-22) — Postgres
+      # sigue escuchando en 5432 DENTRO del contenedor, solo cambia el
+      # puerto del host. Si en otro entorno 5432 sí está libre, esto sigue
+      # funcionando igual (el mapeo es independiente del puerto interno).
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # IMPORTANTE tras crear el contenedor con un volumen nuevo (o si
+    # postgres_data se resetea): estos scripts NO se auto-aplican (no están
+    # montados en /docker-entrypoint-initdb.d porque dependen de que las
+    # tablas ya existan, así que tienen que ir después de las migraciones de
+    # EF Core, no en el arranque del contenedor). Aplicar en orden:
+    #   1. dotnet ef database update (desde src/Infrastructure, crea las tablas)
+    #   2. psql -h localhost -U legalcase -d legalcase \
+    #        -f src/Infrastructure/Persistence/Sql/001_enable_row_level_security.sql
+    #   3. ... 002_extend_row_level_security.sql
+    #   4. ... 003_create_app_role.sql (crea/corrige legalcase_app; sin esto,
+    #      la Api falla con "password authentication failed" al conectar —
+    #      el script ya es idempotente y corrige la contraseña aunque el rol
+    #      exista con otra distinta, así que reaplicarlo siempre es seguro)
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: legalcase-rabbitmq
+    # RabbitMQ nombra su nodo Erlang a partir del hostname del contenedor
+    # (rabbit@<hostname>) — sin fijarlo, cada `--force-recreate` genera un
+    # hostname nuevo (el ID del contenedor), así que Mnesia (colas/usuarios
+    # persistentes) queda huérfana en cada recreación aunque el volumen
+    # rabbitmq_data se conserve. Confirmado el 2026-08-24 (migración a
+    # Docker Engine nativo): tras restaurar el volumen desde backup, el
+    # usuario "legalcase" seguía sin aparecer hasta fijar esto — con
+    # hostname fijo, el mismo nodo Erlang persiste entre recreaciones.
+    hostname: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin_dev
+      RABBITMQ_DEFAULT_VHOST: /
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      # consumer_timeout ampliado a 90 min, y carga del usuario "legalcase"
+      # vía load_definitions — ver comentarios en rabbitmq.conf (el antiguo
+      # rabbitmq-init.sh montado en /docker-entrypoint-init.d/ nunca se
+      # ejecutaba de verdad, esa imagen no soporta ese hook).
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-definitions.json:/etc/rabbitmq/definitions.json:ro
+
+  seaweedfs:
+    # Almacenamiento de objetos para los adjuntos (Fase 2.4). Reemplaza a
+    # MinIO. Modo "server" todo-en-uno (master+volume+filer+gateway S3),
+    # compatible con el API de S3 vía -s3, así que IDocumentStorage (que usa
+    # AWSSDK.S3, el SDK genérico, no el propio de MinIO) sigue funcionando
+    # sin cambiar código, solo la config de conexión de más abajo.
+    image: chrislusf/seaweedfs:4.41
+    container_name: legalcase-seaweedfs
+    restart: unless-stopped
+    command: >
+      server -dir=/data -filer
+      -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "9000:8333"   # API S3 (mismo puerto externo que usaba MinIO)
+      - "9333:9333"   # API/estado del master
+      - "8888:8888"   # filer, permite navegar los objetos en http://localhost:8888
+    volumes:
+      - seaweedfs_data:/data
+      - ./seaweedfs-s3-config.json:/etc/seaweedfs/s3.json:ro
+
+  ocr-paddle:
+    # Microservicio Python (FastAPI + PaddleOCR PP-OCRv6 + OpenCV) para OCR
+    # de escaneos de mala calidad. Ver services/ocr-paddle/README.md.
+    build:
+      context: ./services/ocr-paddle
+    container_name: legalcase-ocr-paddle
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      # Cada página se procesa primero con la variante "mobile" (PP-OCRv6
+      # tier "small", rápida); si su confianza media queda por debajo de
+      # este umbral, O si el texto reconocido contiene algún carácter CJK
+      # (alucinación — ver _contiene_cjk en main.py), se reprocesa esa
+      # página en concreto con la variante "server" (PP-OCRv6 tier
+      # "medium", más lenta y precisa) — salvo que OCR_HABILITAR_SERVER
+      # esté a "false" (ver abajo). Ajustable sin recompilar, solo
+      # reiniciando el contenedor.
+      OCR_CONFIANZA_MINIMA: "0.80"
+      # DESACTIVADO PERMANENTEMENTE el 2026-09-04/05, con datos reales a
+      # escala completa (928 páginas de la Gaceta, ver memoria de proyecto
+      # `prueba2_gaceta_928_estado`) — no es un experimento puntual, es la
+      # conclusión. Historial: reactivado el 2026-08-30 (IA.2c) tras probar
+      # PP-OCRv6 medium sobre una muestra de solo 20 páginas, donde SÍ
+      # parecía ayudar (subía confianza, eliminaba alucinación CJK). Esa
+      # conclusión no se sostuvo al comparar el TEXTO real (no solo la
+      # confianza) en las 928 páginas completas, ejecutando el pipeline dos
+      # veces (con y sin server) sobre el mismo documento y comparando
+      # página a página:
+      # - En páginas de prosa normal (elegidas para la comparación: 111,
+      #   112, 693, 727, 729): mobile y server dan un texto prácticamente
+      #   idéntico — server no corrige nada real, solo repite el mismo
+      #   contenido.
+      # - En páginas de tablas numéricas densas (697, 698, 700, 701, 702,
+      #   704): AMBAS variantes dan una secuencia de dígitos sin sentido,
+      #   casi igual de ininteligible — server NO arregla este tipo de
+      #   contenido pese a reportar más confianza numérica (p.ej. página
+      #   700: 0.952→0.995 de confianza, pero el texto sigue siendo basura
+      #   en los dos casos). La confianza del modelo no es una señal fiable
+      #   de calidad real para tablas numéricas.
+      # Conclusión: en ningún caso de la muestra revisada aportó valor real
+      # server, solo tiempo (61.6 min extra de 137 min totales en la prueba
+      # con server, ~43% del tiempo total del documento). El problema de
+      # las tablas numéricas es un límite real del motor actual con ese
+      # tipo de contenido — no se arregla con el reprocesado "server", haría
+      # falta otra vía (reconocimiento de tablas, o valorar con el negocio
+      # si ese contenido es siquiera relevante para OCR). Si se retoma esta
+      # variable, hacerlo con datos nuevos que contradigan lo de arriba, no
+      # solo con una muestra pequeña como la de 20 páginas que originó el
+      # cambio anterior.
+      OCR_HABILITAR_SERVER: "false"
+      # Nº de procesos del pool "mobile" (la ruta rápida, la mayoría de las
+      # páginas). SIN valor aquí a propósito desde el 2026-08-25: main.py
+      # (_cpus_disponibles()) lo calcula solo a partir del límite `cpus:` de
+      # más abajo (CPUs asignadas a ESTE contenedor, no del host completo) —
+      # portable entre máquinas con distinto nº de núcleos sin tener que
+      # recalcular nada a mano en cada despliegue. Antes estaba fijo a 2:
+      # bajado de 4 tras comprobar en pruebas reales que con 4 el contenedor
+      # llegaba a ~7.7 GB de RSS y esta máquina entraba en swap — pero esa
+      # limitación era de MEMORIA (ya resuelta con el reciclado periódico,
+      # ver OCR_RECICLAR_CADA_N_PAGINAS más abajo), no un motivo para limitar
+      # las CPUs. Fijar un número aquí (p.ej. "2") sigue siendo válido si se
+      # quiere anular la auto-detección.
+      # Pool SEPARADO y dedicado solo al reprocesado con la variante server
+      # (ver OCR_PROCESOS_SERVER en main.py para el porqué de separarlo del
+      # pool mobile de arriba: hasta el 2026-08-23 cada worker cargaba las
+      # dos variantes a la vez y eso hacía que un solo proceso llegara a
+      # 2-3.6 GB de RSS y disparara el OOM-killer al procesar páginas
+      # degradadas reales). Por defecto 1: las páginas degradadas son la
+      # minoría por diseño, así que se reprocesan en serie.
+      OCR_PROCESOS_SERVER: "1"
+      # Hilos de cómputo internos por proceso (PaddleX cpu_threads +
+      # cv2.setNumThreads, ver OCR_HILOS_POR_PROCESO en main.py — NO es lo
+      # mismo que las variables OMP/BLAS de abajo, esas no las gobiernan).
+      # Ajuste explícito aquí aunque coincida con el valor por defecto de
+      # main.py, para que quede visible en la config de despliegue: 1 hilo
+      # por proceso es lo que hace que "nº de procesos = nº de CPUs
+      # asignadas" (ver cpus: más abajo y la auto-detección de OCR_PROCESOS)
+      # no sobresuscriba CPU, sea cual sea el nº de CPUs de este host en
+      # concreto.
+      OCR_HILOS_POR_PROCESO: "1"
+      # Cada proceso worker, sin este límite, deja que las librerías
+      # numéricas de Paddle (OpenBLAS/MKL/OpenMP) abran varios hilos
+      # internos por su cuenta — con 2 procesos compitiendo por solo 2 cpus
+      # (ver el límite de abajo), eso es sobresuscripción de CPU real: más
+      # hilos activos que núcleos físicos, todos compitiendo por el mismo
+      # tiempo de CPU. Comprobado en pruebas: sin este límite, un documento
+      # tardaba muchísimo más de lo esperado (25 páginas en 25 minutos con
+      # 2 workers). Un hilo por worker = 2 hilos para 2 cpus, sin contienda.
+      # NOTA: esto por sí solo NO bastó — el cuello de botella dominante
+      # resultó ser OCR_HILOS_POR_PROCESO de arriba (PaddleX usa 8 hilos por
+      # defecto, ignorando estas variables); se deja de todos modos por si
+      # alguna librería del entorno sí las respeta.
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      # Tope duro de tiempo para procesar UN documento completo (todas sus
+      # páginas), no por página — pasado este plazo se matan a la fuerza los
+      # workers que sigan vivos y la petición falla en vez de colgarse (ver
+      # _matar_workers_a_la_fuerza en main.py).
+      #
+      # Subido de 1500s (25 min) a 9000s (150 min) el 2026-08-25: con 4
+      # workers mobile medido en pruebas reales a ~7.4s/página (500 páginas
+      # ≈ 62 min de fase mobile) más las páginas degradadas del documento de
+      # prueba completo (32 páginas reales, vía server con reciclado por
+      # página, medido a ~108s/página ≈ 58 min) — un total realista de ~2h
+      # que el límite anterior de 25 min ni de lejos cubría, cortando la
+      # prueba antes de que pudiera dar un resultado real. El objetivo
+      # original es <30 min DE OCR PURO (imagen→texto, sin contar la
+      # conversión PDF→imagen previa, según aclaración explícita del
+      # usuario) — ese objetivo puede no cumplirse en este equipo, y 150 min
+      # de margen aquí es precisamente para dejar que la prueba TERMINE y
+      # documentar el resultado real en vez de forzar una cifra que no se
+      # sostiene en este hardware, tal como pide la tarea original.
+      # IMPORTANTE: acoplado con el timeout del HttpClient del Worker .NET
+      # (AddDocumentPipeline, Infrastructure) y con el consumer_timeout de
+      # RabbitMQ (rabbitmq.conf) — los tres deben subir juntos, en ese
+      # orden creciente (RabbitMQ > cliente .NET > este), o el más corto de
+      # los tres corta la petición antes de que el más largo pueda actuar.
+      #
+      # Subido de 150 a 240 min el 2026-09-03 tras el primer intento real de
+      # la Prueba 2 (928 páginas reales de la Gaceta): este plazo es
+      # ABSOLUTO y COMPARTIDO entre las dos fases (mobile + server, ver
+      # _ejecutar_ocr_paginas en main.py), no uno por fase. La fase mobile
+      # sola tardó ~95 min con las 928 páginas reales (más pesadas que el
+      # documento sintético de 500 páginas usado en la Prueba 1); eso dejó
+      # solo ~55 min para reprocesar con "server" las páginas marcadas,
+      # insuficiente (necesitaba ~62 min para 100 páginas) — el plazo saltó
+      # a 13 páginas del final y todo el documento falló. 240 min da margen
+      # real sobre el ~160 min medido (95+65), no solo un parche puntual.
+      OCR_TIMEOUT_SEGUNDOS: "14400"
+      # Cada cuántas páginas se recicla (recrea) el pool mobile completo, no
+      # solo el server (que ya se recicla por página, ver main.py). Sin
+      # esto, un worker mobile de larga vida procesando cientos de páginas
+      # seguidas acumula memoria hasta el OOM del kernel — comprobado con
+      # `dmesg` varias veces en pruebas reales (2026-08-24, 25 y 26),
+      # llegando a 2.7-4+ GB de RSS tras un nº de páginas variable (no
+      # siempre el mismo, hay variabilidad real entre ejecuciones). Bajado
+      # de 40 a 20 el 2026-08-26 tras comprobar que con 40 seguían dándose
+      # caídas dentro de un mismo chunk con más frecuencia de la esperada —
+      # reciclar más a menudo reduce la probabilidad de acumular memoria
+      # suficiente para el OOM, a cambio de más recargas de modelo
+      # (~10-15s cada 20 páginas, todavía despreciable frente al tiempo de
+      # OCR de ese mismo tramo).
+      OCR_RECICLAR_CADA_N_PAGINAS: "20"
+      # Nº de intentos por chunk antes de abandonar (ver _ejecutar_chunk en
+      # main.py). Subido de 2 a 3 el 2026-08-26: en una prueba real de 500
+      # páginas, dos caídas SEGUIDAS en el mismo chunk agotaron el margen
+      # de reintento y tiraron todo el documento — con varios chunks por
+      # documento, la probabilidad de que le pase a al menos uno no es
+      # despreciable. Un tercer intento reduce bastante esa probabilidad.
+      OCR_INTENTOS_POR_CHUNK: "3"
+    deploy:
+      resources:
+        limits:
+          # Tope duro que hace cumplir la reserva de núcleos a nivel de SO
+          # (cgroup) — y ES la fuente de la que OCR_PROCESOS se auto-detecta
+          # (ver _cpus_disponibles() en main.py), así que este es el ÚNICO
+          # número que hay que decidir a mano al desplegar en un host nuevo:
+          # cuántas CPUs totales de ESE host dar a OCR. Fórmula: CPUs totales
+          # del host (`nproc`) menos una reserva para el resto del stack
+          # (Postgres, RabbitMQ, SeaweedFS, Api, Worker, SO/WSL2 si aplica).
+          #
+          # Subido de 2 a 9 el 2026-08-25, y bajado a 5 el mismo día tras
+          # probarlo: con 8 workers mobile reales el contenedor entero llegó
+          # al límite de memoria y el kernel mató un proceso por OOM en los
+          # primeros minutos (`dmesg`, ~4 min, cero páginas completadas) —
+          # el error fue escalar procesos ×4 (2→8) subiendo memoria solo
+          # ×1.25 (8g→10g): la base de los modelos (~600 MB/worker en
+          # reposo) no es el problema, es la memoria de trabajo real con 8
+          # workers procesando páginas A LA VEZ, mucho mayor que en reposo.
+          # 5 = 4 para el pool mobile + 1 para el server: validado a escala
+          # REAL en la Prueba 2 (928 páginas de la Gaceta de Madrid,
+          # 2026-09-02/03, ver memoria de proyecto `prueba2_gaceta_928_estado`)
+          # — corrió más de 40 min con datos reales sin OOM del contenedor,
+          # confirmando que este nivel es estable, no solo teórico.
+          #
+          # Subido de 5 a 9 el 2026-09-03: con esos mismos datos reales se
+          # midió que la fase "mobile" (rápida, TODAS las páginas) domina el
+          # tiempo total (~134 de ~200 min en 928p) y ya saturaba el límite
+          # de 4 procesos mobile en paralelo (confirmado en logs, no una
+          # suposición) — ver memoria `pendiente_evaluar_gpu_alquilada_ocr`.
+          # El host de desarrollo subió de 15.85 GB / ~16 CPUs a 20 GB / 14
+          # CPUs el 2026-09-02 (`.wslconfig`, ver memoria `wsl-memory`), así
+          # que hay margen no probado todavía. 9 = 8 para el pool mobile
+          # (dobla el paralelismo mobile, la palanca que de verdad mueve la
+          # aguja) + 1 para el server, dejando 5 CPUs para el resto del stack
+          # (Postgres, RabbitMQ, SeaweedFS, doc-classifier, Api, Worker,
+          # WSL2, vscode-server) — un salto ×2 en vez de ×4 a propósito,
+          # aprendiendo de la lección del 2026-08-25 de arriba (escalar
+          # procesos ×4 subiendo memoria solo ×1.25 causó OOM en minutos).
+          # Aquí memoria también sube proporcionalmente (ver `memory:` abajo,
+          # 10g→16g, ×1.6, no ×1.25) y cada worker mobile es más ligero que
+          # uno "server" (el pico de 3.76 GB medido más abajo es específico
+          # de la variante server con una página degradada, no del mobile).
+          # Pendiente de validar con una prueba real a esta escala — si
+          # reaparecen señales de OOM en los primeros minutos (mismo patrón
+          # que el 2026-08-25), bajar de nuevo antes de dejar correr horas.
+          cpus: "9"
+          # Red de seguridad: una página anómala (imagen enorme, corrupta)
+          # puede disparar el consumo de memoria de un worker. Sin este
+          # límite, el OOM-killer del kernel puede matar CUALQUIER proceso
+          # del host (no solo el worker responsable) para liberar memoria.
+          # Con el límite, el contenedor absorbe el golpe: ProcessPoolExecutor
+          # (ver main.py) detecta el worker caído y reintenta esa página en
+          # vez de colgarse — comprobado en pruebas: una página mal generada
+          # de ~67 megapíxeles hizo que un worker llegara a 9 GB de RSS. Con
+          # solo 2 workers (ver OCR_PROCESOS) el peor caso teórico baja
+          # bastante frente a 4-8, y deja mucho más margen al resto de la
+          # máquina — comprobado también en pruebas: con 4 workers y 8g de
+          # límite, el conjunto del sistema (WSL2 + todos los contenedores +
+          # el editor) entraba en swap y el propio contenedor se reiniciaba
+          # solo bajo presión de memoria de toda la VM, no del contenedor.
+          #
+          # Subido de 4g a 6g y luego a 8g el 2026-08-24. Historial:
+          # - Con OCR_HILOS_POR_PROCESO=1 fijado (soluciona la
+          #   sobresuscripción de CPU real, ver ese comentario en main.py),
+          #   el cuello de botella pasó a ser memoria, no CPU — confirmado
+          #   con `dmesg` (oom-kill:constraint=CONSTRAINT_MEMCG) matando un
+          #   worker en 1.8-3.6 GB de RSS con páginas degradadas reales,
+          #   cuando cada worker todavía cargaba mobile+server a la vez.
+          # - Separar el pool en dos (mobile/server, ver OCR_PROCESOS_SERVER
+          #   arriba) quitó la causa "dos variantes a la vez en un mismo
+          #   proceso", pero NO bastó: incluso un worker server-only, recién
+          #   reciclado, procesando UNA sola página degradada, llegó a 3.76
+          #   GB de RSS él solo (comprobado con `dmesg` otra vez) — la
+          #   variante server es sustancialmente más pesada que mobile y el
+          #   pico depende del contenido de la página (más ruido/manchas
+          #   probablemente generan más candidatos de detección), no solo de
+          #   acumular varias páginas seguidas.
+          # - Con esos dos componentes ya medidos por separado (línea base
+          #   en reposo de los pools mobile+server ~2 GB, más un pico de una
+          #   sola página server observado hasta ~4 GB), 6g quedaba justo en
+          #   el filo. 8g dejado con margen real y ya no como número a
+          #   ciegas: el host tiene margen comprobado (`free -h`: ~9-10 GB
+          #   disponibles con el resto de contenedores usando <600 MB
+          #   combinados) para absorberlo sin acercarse al patrón de
+          #   swap-a-nivel-de-VM ya visto con 4 workers y 8g EN LA CONFIG
+          #   ANTIGUA de un solo pool (esa combinación no es comparable: era
+          #   4 procesos con dos variantes cada uno, el doble de motores
+          #   cargados que ahora).
+          # - Subido de 8g a 10g el 2026-08-25 al intentar pasar OCR_PROCESOS
+          #   de 2 a 8 (ver `cpus:` arriba) — INSUFICIENTE, comprobado en
+          #   pruebas reales: con 8 workers mobile procesando páginas a la
+          #   vez, el contenedor entero llegó al límite y el kernel mató un
+          #   proceso por OOM en los primeros ~4 minutos (dmesg confirmado),
+          #   sin completar ni una página. La base de los modelos en reposo
+          #   (~600 MB/worker) no es lo que manda aquí — es la memoria de
+          #   trabajo real de varios workers activos A LA VEZ, bastante
+          #   mayor que en reposo y que no se había medido con 8 workers
+          #   reales antes de subir el límite. Bajado el nº de procesos a 4
+          #   (ver `cpus: "5"` arriba) en vez de seguir subiendo memoria a
+          #   ciegas para sostener 8 — más prudente medir primero cuánta
+          #   memoria necesitan REALMENTE 4 workers activos a la vez antes
+          #   de decidir el siguiente incremento. Host de desarrollo con
+          #   15.85 GB totales, ~5-6 GB usados por el resto del stack.
+          #   Validar SIEMPRE con una prueba real a la escala nueva antes de
+          #   confiar en un número — la lección concreta de este mismo
+          #   cambio.
+          # - Subido de 10g a 16g el 2026-09-03 junto con `cpus:` 5→9 (ver
+          #   ese comentario arriba para el porqué): ×1.6, proporcional al
+          #   ×2 de procesos mobile (4→8), no ×1.25 como el intento fallido
+          #   del 2026-08-25. Host con 20 GB totales (`.wslconfig`, memoria
+          #   `wsl-memory`) y 8 GB de swap como red adicional — deja ~4 GB
+          #   para el resto del stack + WSL2 + vscode-server. Sin validar
+          #   todavía a esta escala; vigilar `dmesg`/`docker stats` en los
+          #   primeros minutos de la siguiente prueba real.
+          memory: "16g"
+    volumes:
+      # Sin esto, cada reinicio del contenedor volvía a descargar los pesos
+      # de PP-OCRv5 (varios cientos de MB) desde cero.
+      - ocr_paddle_models:/root/.paddlex
+
+  doc-classifier:
+    # Microservicio Python (FastAPI + spaCy) para IA.2b: clasificación de
+    # tipo de documento. Separado de ocr-paddle a propósito: /ocr es
+    # bloqueante y puede tardar minutos por página, y no debe retrasar una
+    # clasificación que debería responder en milisegundos. Ver
+    # services/doc-classifier/README.md.
+    build:
+      context: ./services/doc-classifier
+    container_name: legalcase-doc-classifier
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  seaweedfs_data:
+  ocr_paddle_models:

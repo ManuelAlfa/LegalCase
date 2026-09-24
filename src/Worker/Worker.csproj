@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LegalCaseManagement.Worker</RootNamespace>
+    <UserSecretsId>dotnet-Worker-17ed7537-01aa-4c6f-a477-7a505b84a0e1</UserSecretsId>
+    <!-- Server GC (el valor por defecto de Microsoft.NET.Sdk.Worker) crea un
+         heap POR NÚCLEO LÓGICO. En esta máquina de desarrollo (16 núcleos)
+         eso reserva varios GB de segmentos de heap incluso con poca
+         cantidad de datos vivos — confirmado el 2026-09-02 procesando un
+         documento real de 1.5GB: el proceso Worker llegó a 6.75GB de RSS
+         con solo ~1MB leído de red/disco (rchar), descartando que fuera
+         simplemente "el fichero entero en memoria". Workstation GC usa un
+         solo heap, independiente del número de núcleos — apropiado aquí
+         porque el propio diseño ya procesa un documento a la vez
+         (PrefetchCount=1 en Program.cs), así que no hay nada que Server GC
+         paralelice realmente para este proceso. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MassTransit" Version="8.5.10" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Contracts\Contracts.csproj" />
+    <ProjectReference Include="..\Domain\Domain.csproj" />
+    <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

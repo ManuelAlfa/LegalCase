@@ -1,0 +1,29 @@
+@* Componente reutilizable de la tarea 6.0: copia un texto al portapapeles
+   del navegador y confirma visualmente con un MudSnackbar breve. Pensado
+   para folios (tarea 6.5) y nombres de documento, para el flujo real de
+   redactar un escrito con el expediente y Word abiertos a la vez. *@
+@inject IJSRuntime JsRuntime
+@inject ISnackbar Snackbar
+
+<MudTooltip Text="@Texto">
+    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                    Size="Size.Small"
+                    OnClick="CopiarAsync"
+                    aria-label="@($"Copiar {Texto}")" />
+</MudTooltip>
+
+@code {
+    /// <summary>Texto que se copia al portapapeles al pulsar el botón.</summary>
+    [Parameter, EditorRequired]
+    public string Texto { get; set; } = string.Empty;
+
+    /// <summary>Mensaje mostrado en el MudSnackbar de confirmación.</summary>
+    [Parameter]
+    public string MensajeConfirmacion { get; set; } = "Copiado al portapapeles";
+
+    private async Task CopiarAsync()
+    {
+        await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", Texto);
+        Snackbar.Add(MensajeConfirmacion, Severity.Success);
+    }
+}

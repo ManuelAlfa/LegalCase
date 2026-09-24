@@ -1,0 +1,63 @@
+@* Listado completo de expedientes (ruta base de la tarea 6.2; la ficha de
+   detalle con pestañas es la tarea 6.4). Reutiliza la misma tabla que el
+   Panel principal para que ambas pantallas no diverjan. *@
+@page "/expedientes"
+@using LegalCaseManagement.Domain.Entities
+@inject ExpedientesApiClient ExpedientesApiClient
+@inject MateriasApiClient MateriasApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>Expedientes — Compás</PageTitle>
+
+<div class="cps-pagehead">
+    <h1>Expedientes</h1>
+</div>
+
+@if (_cargando)
+{
+    <div class="cps-card"><p class="cps-vacio">Cargando expedientes…</p></div>
+}
+else if (_error is not null)
+{
+    <div class="cps-alert-error" role="alert">
+        <svg class="icon" style="width:16px;height:16px"><use href="#i-x" /></svg>
+        @_error
+    </div>
+}
+else
+{
+    <TablaExpedientes Titulo="Todos los expedientes"
+                      Expedientes="_expedientes"
+                      MateriasPorId="_materiasPorId"
+                      OnSeleccionar="AbrirExpediente" />
+}
+
+@code {
+    private bool _cargando = true;
+    private string? _error;
+    private List<Expediente> _expedientes = [];
+    private Dictionary<Guid, Materia> _materiasPorId = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var expedientesTask = ExpedientesApiClient.ListarAsync();
+            var materiasTask = MateriasApiClient.ListarAsync();
+            await Task.WhenAll(expedientesTask, materiasTask);
+
+            _expedientes = await expedientesTask;
+            _materiasPorId = (await materiasTask).ToDictionary(m => m.Id);
+        }
+        catch (HttpRequestException)
+        {
+            _error = "No se pudieron cargar los expedientes. Comprueba que la Api esté en marcha y que la sesión siga siendo válida.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private void AbrirExpediente(Guid id) => Navigation.NavigateTo($"/expedientes/{id}");
+}

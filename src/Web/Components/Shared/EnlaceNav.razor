@@ -1,0 +1,44 @@
+@* Enlace de navegación del cps-drawer (tarea 6.2), resaltado cuando la
+   ruta actual cuelga de él. *@
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<a class="cps-navlink @(EsRutaActual ? "selected" : "")" href="@Ruta"
+   aria-current="@(EsRutaActual ? "page" : null)">
+    <svg class="icon"><use href="@($"#{Icono}")" /></svg>
+    @Texto
+</a>
+
+@code {
+    [Parameter, EditorRequired] public string Ruta { get; set; } = "/";
+    [Parameter, EditorRequired] public string Icono { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Texto { get; set; } = string.Empty;
+
+    private bool EsRutaActual
+    {
+        get
+        {
+            var actual = Normalizar(Navigation.ToBaseRelativePath(Navigation.Uri));
+            var propia = Normalizar(Ruta);
+
+            // La raíz solo coincide consigo misma: es prefijo de todo lo demás.
+            return propia.Length == 0
+                ? actual.Length == 0
+                // Una subruta (/expedientes/{id}) resalta su sección (/expedientes).
+                : actual == propia || actual.StartsWith(propia + "/", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private static string Normalizar(string ruta)
+    {
+        var limpia = ruta.Split('?')[0].Split('#')[0];
+        return limpia.Trim('/').ToLowerInvariant();
+    }
+
+    protected override void OnInitialized() => Navigation.LocationChanged += AlCambiarRuta;
+
+    private void AlCambiarRuta(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => StateHasChanged();
+
+    public void Dispose() => Navigation.LocationChanged -= AlCambiarRuta;
+}

@@ -1,0 +1,101 @@
+@* Tabla de expedientes con filtro rápido (tarea 6.3), compartida por el
+   Panel principal y la pantalla de Expedientes para que ambas muestren
+   exactamente las mismas columnas, colores y comportamiento. Marcado
+   traducido de la sección "Expedientes activos" de
+   mockup_pantallas_compas_mudblazor.html. *@
+@using LegalCaseManagement.Domain.Entities
+
+<div class="cps-card">
+    <div class="cps-list-toolbar">
+        <h3 style="margin:0;flex:1">
+            @Titulo
+            <span class="cps-count">mostrando @Filtrados.Count de @Expedientes.Count</span>
+        </h3>
+        <div class="cps-field" style="width:280px">
+            <input class="cps-input" type="search" placeholder="Filtrar por número, cliente o materia…"
+                   aria-label="Filtrar expedientes"
+                   value="@_filtro" @oninput="AlEscribirFiltro" />
+        </div>
+    </div>
+
+    @if (Expedientes.Count == 0)
+    {
+        <p class="cps-vacio">Todavía no hay expedientes en este despacho.</p>
+    }
+    else if (Filtrados.Count == 0)
+    {
+        <p class="cps-vacio">Ningún expediente coincide con «@_filtro».</p>
+    }
+    else
+    {
+        <div class="cps-table-wrap">
+            <table class="cps-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Expediente</th>
+                        <th scope="col">Cliente</th>
+                        <th scope="col">Materia</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col"><span class="cps-visualmente-oculto">Abrir</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var expediente in Filtrados)
+                    {
+                        <tr class="cps-fila-pulsable" @onclick="() => Abrir(expediente.Id)">
+                            <td>@expediente.Titulo</td>
+                            <td>@expediente.Cliente</td>
+                            <td>@NombreMateria(expediente.MateriaId)</td>
+                            <td>
+                                <span class="cps-chip @Presentacion.ClaseChipEstado(expediente.Estado)">
+                                    @Presentacion.TextoEstado(expediente.Estado)
+                                </span>
+                            </td>
+                            <td class="row-actions">
+                                <span class="cps-iconbtn" style="width:32px;height:32px" aria-hidden="true">
+                                    <svg class="icon cps-chev-derecha" style="width:16px;height:16px"><use href="#i-chev" /></svg>
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Titulo { get; set; } = "Expedientes";
+
+    [Parameter, EditorRequired] public IReadOnlyList<Expediente> Expedientes { get; set; } = [];
+
+    /// <summary>Materias por Id, para mostrar el nombre en vez del GUID.</summary>
+    [Parameter] public IReadOnlyDictionary<Guid, Materia> MateriasPorId { get; set; } =
+        new Dictionary<Guid, Materia>();
+
+    [Parameter] public EventCallback<Guid> OnSeleccionar { get; set; }
+
+    private string _filtro = string.Empty;
+
+    private List<Expediente> Filtrados =>
+        string.IsNullOrWhiteSpace(_filtro)
+            ? [.. Expedientes]
+            : [.. Expedientes.Where(Coincide)];
+
+    private bool Coincide(Expediente expediente)
+    {
+        var texto = _filtro.Trim();
+        return expediente.Titulo.Contains(texto, StringComparison.OrdinalIgnoreCase)
+            || expediente.Cliente.Contains(texto, StringComparison.OrdinalIgnoreCase)
+            || NombreMateria(expediente.MateriaId).Contains(texto, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void AlEscribirFiltro(ChangeEventArgs e) => _filtro = e.Value?.ToString() ?? string.Empty;
+
+    private string NombreMateria(Guid? materiaId) =>
+        materiaId is { } id && MateriasPorId.TryGetValue(id, out var materia)
+            ? materia.Nombre
+            : "—";
+
+    private Task Abrir(Guid id) => OnSeleccionar.InvokeAsync(id);
+}

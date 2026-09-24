@@ -1,0 +1,90 @@
+@* Listado de clientes (ruta base de la tarea 6.2). Alta y edición de
+   clientes pertenecen a una tarea posterior: aquí solo se listan los datos
+   reales que ya existen. *@
+@page "/clientes"
+@using LegalCaseManagement.Domain.Entities
+@inject ClientesApiClient ClientesApiClient
+
+<PageTitle>Clientes — Compás</PageTitle>
+
+<div class="cps-pagehead">
+    <h1>Clientes</h1>
+</div>
+
+@if (_cargando)
+{
+    <div class="cps-card"><p class="cps-vacio">Cargando clientes…</p></div>
+}
+else if (_error is not null)
+{
+    <div class="cps-alert-error" role="alert">
+        <svg class="icon" style="width:16px;height:16px"><use href="#i-x" /></svg>
+        @_error
+    </div>
+}
+else
+{
+    <div class="cps-card">
+        <div class="cps-list-toolbar">
+            <h3 style="margin:0;flex:1">
+                Clientes del despacho
+                <span class="cps-count">@_clientes.Count en total</span>
+            </h3>
+        </div>
+
+        @if (_clientes.Count == 0)
+        {
+            <p class="cps-vacio">Todavía no hay clientes registrados.</p>
+        }
+        else
+        {
+            <div class="cps-table-wrap">
+                <table class="cps-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Nombre</th>
+                            <th scope="col">DNI / CIF</th>
+                            <th scope="col">Correo electrónico</th>
+                            <th scope="col">Teléfono</th>
+                            <th scope="col">Canal preferido</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var cliente in _clientes)
+                        {
+                            <tr>
+                                <td>@cliente.Nombre</td>
+                                <td class="tabular">@cliente.DniCif</td>
+                                <td>@cliente.Email</td>
+                                <td class="tabular">@cliente.Telefono</td>
+                                <td>@cliente.CanalPreferido</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool _cargando = true;
+    private string? _error;
+    private List<Cliente> _clientes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _clientes = [.. (await ClientesApiClient.ListarAsync()).OrderBy(c => c.Nombre)];
+        }
+        catch (HttpRequestException)
+        {
+            _error = "No se pudieron cargar los clientes. Comprueba que la Api esté en marcha y que la sesión siga siendo válida.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+}

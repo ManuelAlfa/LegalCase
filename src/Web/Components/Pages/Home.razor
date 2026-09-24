@@ -1,0 +1,152 @@
+@* Panel principal (tarea 6.3). Disposición traducida de la sección
+   "screen-dashboard" de mockup_pantallas_compas_mudblazor.html.
+
+   Solo se pintan con datos reales las secciones que tienen un origen real
+   hoy: Plazos próximos y Expedientes activos (sembrados por
+   seed_datos_ficticios.sql). Las tarjetas de estadística que dependen del
+   pipeline de OCR/IA se muestran como "sin datos todavía" en vez de con los
+   números fijos del mockup — instrucción explícita de la tarea 6.3: nunca
+   inventar un dato que no existe. *@
+@page "/"
+@using LegalCaseManagement.Domain.Entities
+@inject ExpedientesApiClient ExpedientesApiClient
+@inject PlazosApiClient PlazosApiClient
+@inject MateriasApiClient MateriasApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>Panel principal — Compás</PageTitle>
+
+<div class="cps-pagehead">
+    <h1>Panel principal</h1>
+    <span class="meta">@Presentacion.FechaLarga(DateTime.Now)</span>
+</div>
+
+@if (_cargando)
+{
+    <div class="cps-card"><p class="cps-vacio">Cargando datos del despacho…</p></div>
+}
+else if (_error is not null)
+{
+    <div class="cps-alert-error" role="alert">
+        <svg class="icon" style="width:16px;height:16px"><use href="#i-x" /></svg>
+        @_error
+    </div>
+}
+else
+{
+    <div class="cps-stat-grid">
+        <div class="cps-stat-card">
+            <span class="label">Expedientes activos</span>
+            <span class="value tabular">@_expedientesActivos</span>
+            <span class="sub">de @_expedientes.Count en total</span>
+        </div>
+        <div class="cps-stat-card">
+            <span class="label">Pendientes de OCR</span>
+            <span class="value tabular">—</span>
+            <span class="sub">sin datos todavía</span>
+        </div>
+        <div class="cps-stat-card">
+            <span class="label">Páginas procesadas / mes</span>
+            <span class="value tabular">—</span>
+            <span class="sub">sin datos todavía</span>
+        </div>
+        <div class="cps-stat-card">
+            <span class="label">Almacenamiento</span>
+            <span class="value tabular">—</span>
+            <span class="sub">sin datos todavía</span>
+        </div>
+    </div>
+
+    <div class="cps-card">
+        <h3>Plazos próximos</h3>
+        @if (_plazos.Count == 0)
+        {
+            <p class="cps-vacio">No hay plazos registrados.</p>
+        }
+        else
+        {
+            <div class="cps-timeline">
+                @foreach (var (plazo, indice) in _plazos.Select((p, i) => (p, i)))
+                {
+                    var dias = Presentacion.DiasHasta(plazo.FechaLimite);
+                    var esUltimo = indice == _plazos.Count - 1;
+                    <div class="cps-timeline-item">
+                        <div class="cps-timeline-dot-wrap">
+                            <span class="cps-timeline-dot"
+                                  style="background:@Presentacion.ColorPuntoUrgencia(dias);box-shadow:0 0 0 1px @Presentacion.ColorPuntoUrgencia(dias)"></span>
+                            @if (!esUltimo)
+                            {
+                                <span class="cps-timeline-line"></span>
+                            }
+                        </div>
+                        <div class="cps-timeline-content">
+                            <b>@plazo.Descripcion</b>
+                            <div class="cps-timeline-date">@TituloExpediente(plazo.ExpedienteId)</div>
+                            <span class="cps-chip @Presentacion.ClaseChipUrgencia(dias)">@Presentacion.TextoUrgencia(dias)</span>
+                            <span class="tabular" style="font-size:12px;color:var(--mud-text-secondary)">
+                                @Presentacion.FechaCorta(plazo.FechaLimite)
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <TablaExpedientes Titulo="Expedientes activos"
+                      Expedientes="_expedientes"
+                      MateriasPorId="_materiasPorId"
+                      OnSeleccionar="AbrirExpediente" />
+}
+
+@code {
+    private bool _cargando = true;
+    private string? _error;
+
+    private List<Plazo> _plazos = [];
+    private List<Expediente> _expedientes = [];
+    private Dictionary<Guid, Expediente> _expedientesPorId = [];
+    private Dictionary<Guid, Materia> _materiasPorId = [];
+
+    private int _expedientesActivos;
+
+    // Cuántos plazos caben en el panel: el resto vive en su propia pantalla
+    // (todavía no construida), igual que en el mockup.
+    private const int PlazosEnPanel = 3;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var expedientesTask = ExpedientesApiClient.ListarAsync();
+            var plazosTask = PlazosApiClient.ListarAsync();
+            var materiasTask = MateriasApiClient.ListarAsync();
+            await Task.WhenAll(expedientesTask, plazosTask, materiasTask);
+
+            _expedientes = await expedientesTask;
+            _expedientesPorId = _expedientes.ToDictionary(e => e.Id);
+            _materiasPorId = (await materiasTask).ToDictionary(m => m.Id);
+
+            _expedientesActivos = _expedientes.Count(e =>
+                e.Estado is EstadoExpediente.Abierto or EstadoExpediente.EnTramite);
+
+            // El endpoint ya los devuelve ordenados por fecha límite ascendente.
+            _plazos = [.. (await plazosTask).Take(PlazosEnPanel)];
+        }
+        catch (HttpRequestException)
+        {
+            _error = "No se pudieron cargar los datos. Comprueba que la Api esté en marcha y que la sesión siga siendo válida.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private string TituloExpediente(Guid expedienteId) =>
+        _expedientesPorId.TryGetValue(expedienteId, out var expediente)
+            ? expediente.Titulo
+            : "Expediente no encontrado";
+
+    private void AbrirExpediente(Guid id) => Navigation.NavigateTo($"/expedientes/{id}");
+}

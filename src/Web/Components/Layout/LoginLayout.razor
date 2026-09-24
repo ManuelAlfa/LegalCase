@@ -1,0 +1,14 @@
+@* Layout propio para la pantalla de acceso (tarea 6.2): sin app-shell
+   (appbar/drawer), ya que todavía no hay sesión iniciada. Los proveedores
+   de MudBlazor se repiten aquí (y no solo en MainLayout) porque cada
+   página usa exactamente un layout activo a la vez — nunca ambos montados
+   a la vez, así que no hay conflicto de diálogos/snackbars duplicados. *@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="CompasTheme.Theme" IsDarkMode="false" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<IconSprite />
+
+@Body

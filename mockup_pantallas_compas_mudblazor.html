@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Compás — mismo mockup, componentes MudBlazor</title>
+<meta name="description" content="Las mismas 8 pantallas y los mismos datos de mockup_pantallas_compas.html, reconstruidas con el lenguaje visual real de MudBlazor (Material), para decidir con Manuel si el resultado es aceptable antes de construir el Blazor Server real.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap');
+
+  :root{
+    /* Paleta tomada literalmente de mockup_pantallas_compas.html (--accent/--ok/--warn/--danger/--info/--ink),
+       aplicada aquí como si fuera un MudTheme.Palette real. Nota aparte para Manuel: los colores que
+       plan_desarrollo_secuencial.docx (tarea 6.0) documenta como decididos (#1B3A5C / #B8860B) no coinciden
+       exactamente con estos, los que de verdad están en el CSS del mockup — queda pendiente de aclarar cuál
+       de los dos es el correcto, no lo he corregido aquí.
+       Tipografía (2026-09-19, decisión de Manuel): personalización deliberada del Theme.Typography de MudBlazor
+       para acercarse al mockup original — Fraunces para títulos/cifras grandes, Public Sans para el resto —
+       en vez de quedarnos con el Roboto por defecto. Aquí se cargan por comodidad desde Google Fonts (esto es
+       solo un mockup estático); en la app real de producción hay que auto-alojar los ficheros de fuente
+       (self-hosted) en vez de tirar del CDN de Google, ver nota en plan_desarrollo_secuencial.docx tarea 6.0. */
+    --font-display:'Fraunces', 'Iowan Old Style', ui-serif, Georgia, serif;
+    --font-body:'Public Sans', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    --mud-primary:#1F6F64;
+    --mud-primary-darken:#175349;
+    --mud-primary-lighten:#E4F0EC;
+    --mud-dark:#16233A;
+    --mud-success:#2E7D5B;
+    --mud-success-lighten:#E3F3EA;
+    --mud-warning:#B9762B;
+    --mud-warning-lighten:#F8ECDC;
+    --mud-error:#B3402D;
+    --mud-error-lighten:#F8E2DD;
+    --mud-info:#3B6EA5;
+    --mud-info-lighten:#E4ECF5;
+    --mud-surface:#FFFFFF;
+    --mud-background:#F4F6F5;
+    --mud-drawer-bg:#FFFFFF;
+    --mud-text-primary:rgba(0,0,0,.87);
+    --mud-text-secondary:rgba(0,0,0,.60);
+    --mud-text-disabled:rgba(0,0,0,.38);
+    --mud-divider:rgba(0,0,0,.10);
+    --mud-appbar-height:64px;
+    --mud-drawer-width:260px;
+    --mud-radius:6px;
+    --mud-el1:0px 2px 1px -1px rgba(0,0,0,.2),0px 1px 1px 0px rgba(0,0,0,.14),0px 1px 3px 0px rgba(0,0,0,.12);
+    --mud-el2:0px 3px 1px -2px rgba(0,0,0,.2),0px 2px 2px 0px rgba(0,0,0,.14),0px 1px 5px 0px rgba(0,0,0,.12);
+    --mud-el4:0px 2px 4px -1px rgba(0,0,0,.2),0px 4px 5px 0px rgba(0,0,0,.14),0px 1px 10px 0px rgba(0,0,0,.12);
+    --mud-el8:0px 5px 5px -3px rgba(0,0,0,.2),0px 8px 10px 1px rgba(0,0,0,.14),0px 3px 14px 2px rgba(0,0,0,.12);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:#DDE3E6; }
+  body{ font-family:var(--font-body); color:var(--mud-text-primary); -webkit-font-smoothing:antialiased; }
+
+  /* ---- banner explicativo (no forma parte del producto) ---- */
+  .compare-banner{
+    background:var(--mud-dark); color:#fff; padding:10px 20px; font-size:13px; line-height:1.5;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; position:sticky; top:0; z-index:50;
+  }
+  .compare-banner b{ color:#fff; }
+  .compare-banner .tag{ background:rgba(255,255,255,.14); border-radius:999px; padding:2px 10px; font-size:11.5px; font-weight:500; }
+
+  /* ---- presentation switcher (not part of the product) ---- */
+  .switcher-bar{
+    display:flex; align-items:center; gap:16px; padding:0 20px; height:52px; background:#fff;
+    border-bottom:1px solid var(--mud-divider); position:sticky; top:37px; z-index:49; overflow-x:auto;
+  }
+  .switcher-brand{ display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-weight:600; font-size:14px; white-space:nowrap; color:var(--mud-dark); }
+  .switcher-brand .dot{ width:8px; height:8px; border-radius:50%; background:var(--mud-primary); }
+  .tabs{ display:flex; gap:2px; }
+  .tab{
+    appearance:none; border:none; background:transparent; padding:8px 12px; font-family:inherit; font-size:12.5px;
+    font-weight:500; color:var(--mud-text-secondary); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap;
+  }
+  .tab:hover{ color:var(--mud-primary); }
+  .tab[aria-selected="true"]{ color:var(--mud-primary); border-bottom-color:var(--mud-primary); }
+
+  .stage{ display:flex; justify-content:center; padding:20px; }
+  .device{ width:100%; max-width:1180px; background:var(--mud-background); border-radius:8px; overflow:hidden; box-shadow:var(--mud-el2); }
+  .screen{ display:none; }
+  .screen.active{ display:block; }
+
+  /* icons */
+  .icon{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; display:block; }
+
+  /* ============ mud-appbar / mud-drawer shell ============ */
+  .mud-shell{ display:grid; grid-template-columns:var(--mud-drawer-width) 1fr; grid-template-rows:var(--mud-appbar-height) 1fr; min-height:720px; position:relative; }
+  .mud-appbar{
+    grid-column:1/-1; grid-row:1; display:flex; align-items:center; gap:14px; padding:0 16px;
+    background:#fff; box-shadow:var(--mud-el4); z-index:5;
+  }
+  .mud-iconbtn{
+    width:40px; height:40px; border-radius:50%; border:none; background:transparent; display:flex; align-items:center;
+    justify-content:center; color:var(--mud-text-secondary); cursor:pointer; position:relative; flex:none;
+  }
+  .mud-iconbtn:hover{ background:rgba(0,0,0,.06); }
+  .mud-iconbtn .dot-badge{ position:absolute; top:7px; right:8px; width:8px; height:8px; border-radius:50%; background:var(--mud-error); border:2px solid #fff; }
+  .appbar-brand{ display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-weight:600; font-size:17px; color:var(--mud-dark); white-space:nowrap; }
+  .appbar-brand .mark{ width:30px; height:30px; border-radius:8px; background:var(--mud-primary); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .mud-searchfield{
+    flex:1; max-width:420px; display:flex; align-items:center; gap:8px; background:var(--mud-background);
+    border-radius:20px; padding:8px 14px; color:var(--mud-text-secondary);
+  }
+  .mud-searchfield input{ border:none; background:transparent; outline:none; font:inherit; font-size:13.5px; flex:1; color:var(--mud-text-primary); }
+  .appbar-spacer{ flex:1; }
+  .mud-userchip{ display:flex; align-items:center; gap:8px; padding:4px 10px 4px 4px; border-radius:24px; cursor:pointer; }
+  .mud-userchip:hover{ background:rgba(0,0,0,.06); }
+  .mud-avatar{ width:34px; height:34px; border-radius:50%; background:var(--mud-primary); color:#fff; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:700; flex:none; }
+  .mud-userchip .who{ line-height:1.2; display:none; }
+  @media (min-width:680px){ .mud-userchip .who{ display:block; } }
+  .mud-userchip .who b{ font-size:13px; display:block; font-weight:500; }
+  .mud-userchip .who span{ font-size:11.5px; color:var(--mud-text-secondary); }
+
+  .mud-drawer{
+    grid-column:1; grid-row:2; background:var(--mud-drawer-bg); border-right:1px solid var(--mud-divider);
+    padding:12px 10px; overflow-y:auto;
+  }
+  .mud-navlink{
+    display:flex; align-items:center; gap:12px; padding:9px 14px; border-radius:8px; color:var(--mud-text-secondary);
+    text-decoration:none; font-size:13.5px; font-weight:500; margin-bottom:2px; cursor:pointer;
+  }
+  .mud-navlink:hover{ background:rgba(0,0,0,.04); color:var(--mud-text-primary); }
+  .mud-navlink.selected{ background:var(--mud-primary-lighten); color:var(--mud-primary-darken); }
+  .mud-navlink .icon{ width:19px; height:19px; flex:none; }
+  .mud-navgroup-label{ padding:14px 14px 6px; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mud-text-disabled); }
+  .mud-drawer-foot{ margin-top:16px; padding:12px 14px; border-top:1px solid var(--mud-divider); display:flex; align-items:center; gap:10px; }
+  .mud-drawer-foot .mark{ width:28px; height:28px; border-radius:6px; background:var(--mud-dark); color:#fff; display:flex; align-items:center; justify-content:center; flex:none; }
+  .mud-drawer-foot b{ display:block; font-size:12.5px; }
+  .mud-drawer-foot span{ font-size:11px; color:var(--mud-text-secondary); }
+
+  .mud-main{ grid-column:2; grid-row:2; padding:22px 26px; overflow:auto; }
+  .mud-crumbs{ font-size:12.5px; color:var(--mud-text-secondary); margin-bottom:10px; }
+  .mud-crumbs .current{ color:var(--mud-text-primary); font-weight:500; }
+  .mud-pagehead{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+  .mud-pagehead h1{ font-family:var(--font-display); font-size:24px; font-weight:600; margin:0; color:var(--mud-text-primary); }
+  .mud-pagehead .meta{ font-size:12.5px; color:var(--mud-text-secondary); }
+
+  /* ============ mud-card / mud-paper ============ */
+  .mud-card{ background:#fff; border-radius:var(--mud-radius); box-shadow:var(--mud-el1); padding:16px; }
+  .mud-card + .mud-card{ margin-top:16px; }
+  .mud-card h3{ font-size:14.5px; font-weight:500; margin:0 0 12px; display:flex; align-items:center; justify-content:space-between; }
+  .mud-cardtitle-actions{ display:flex; gap:8px; align-items:center; }
+
+  .mud-stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px; }
+  @media (max-width:900px){ .mud-stat-grid{ grid-template-columns:repeat(2,1fr); } }
+  .mud-stat-card{ background:#fff; border-radius:var(--mud-radius); box-shadow:var(--mud-el1); padding:16px; }
+  .mud-stat-card .label{ font-size:12px; color:var(--mud-text-secondary); display:block; margin-bottom:6px; }
+  .mud-stat-card .value{ font-family:var(--font-display); font-size:26px; font-weight:600; display:block; font-variant-numeric:tabular-nums; }
+  .mud-stat-card .sub{ font-size:11.5px; color:var(--mud-text-secondary); display:flex; align-items:center; gap:4px; margin-top:6px; }
+  .mud-stat-card .sub.up{ color:var(--mud-success); }
+  .mud-stat-card .sub .icon{ width:13px; height:13px; }
+
+  /* ============ buttons ============ */
+  .mud-btn{
+    appearance:none; border:none; border-radius:4px; font-family:inherit; font-size:13.5px; font-weight:500;
+    padding:8px 18px; cursor:pointer; display:inline-flex; align-items:center; gap:7px; letter-spacing:.02em;
+  }
+  .mud-btn .icon{ width:16px; height:16px; }
+  .mud-btn-filled{ background:var(--mud-primary); color:#fff; box-shadow:var(--mud-el2); }
+  .mud-btn-filled:hover{ background:var(--mud-primary-darken); box-shadow:var(--mud-el4); }
+  .mud-btn-outlined{ background:transparent; color:var(--mud-primary); border:1px solid var(--mud-primary); }
+  .mud-btn-outlined:hover{ background:var(--mud-primary-lighten); }
+  .mud-btn-text{ background:transparent; color:var(--mud-primary); padding:8px 10px; }
+  .mud-btn-text:hover{ background:rgba(0,0,0,.05); }
+  .mud-btn-sm{ padding:5px 12px; font-size:12.5px; }
+  .mud-btn-block{ width:100%; justify-content:center; }
+
+  /* ============ chips ============ */
+  .mud-chip{
+    display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:3px 12px; font-size:11.5px;
+    font-weight:500; line-height:1.6; white-space:nowrap;
+  }
+  .mud-chip .icon{ width:11px; height:11px; }
+  .mud-chip-success{ background:var(--mud-success-lighten); color:var(--mud-success); }
+  .mud-chip-warning{ background:var(--mud-warning-lighten); color:var(--mud-warning); }
+  .mud-chip-error{ background:var(--mud-error-lighten); color:var(--mud-error); }
+  .mud-chip-info{ background:var(--mud-info-lighten); color:var(--mud-info); }
+  .mud-chip-default{ background:rgba(0,0,0,.08); color:var(--mud-text-secondary); }
+  .mud-chip-outlined{ background:transparent; border:1px solid currentColor; }
+
+  /* ============ text fields ============ */
+  .mud-field{ display:flex; flex-direction:column; gap:5px; }
+  .mud-field label{ font-size:11.5px; font-weight:500; color:var(--mud-text-secondary); }
+  .mud-field .mud-input, .mud-field select, .mud-field textarea{
+    font:inherit; font-size:13.5px; padding:10px 12px; border:1px solid rgba(0,0,0,.23); border-radius:8px;
+    background:#fff; color:var(--mud-text-primary); outline:none;
+  }
+  .mud-field .mud-input:focus, .mud-field select:focus, .mud-field textarea:focus{ border-color:var(--mud-primary); border-width:2px; padding:9px 11px; }
+  .mud-field-check{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--mud-text-secondary); }
+  .mud-field-check input{ width:18px; height:18px; accent-color:var(--mud-primary); }
+
+  /* ============ table (MudDataGrid look) ============ */
+  .mud-table-wrap{ overflow-x:auto; }
+  .mud-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .mud-table thead th{
+    text-align:left; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--mud-text-secondary); padding:10px 12px; border-bottom:2px solid var(--mud-divider); background:#FAFAFA;
+  }
+  .mud-table tbody td{ padding:10px 12px; border-bottom:1px solid var(--mud-divider); vertical-align:middle; }
+  .mud-table td.mud-checkbox-cell{ width:36px; padding:10px 0 10px 12px; }
+  .mud-table td.mud-checkbox-cell input{ width:18px; height:18px; accent-color:var(--mud-primary); cursor:pointer; }
+  .mud-table tbody tr:hover{ background:rgba(0,0,0,.03); }
+  .mud-table .tabular{ font-variant-numeric:tabular-nums; }
+  .mud-table small{ display:block; color:var(--mud-text-secondary); font-size:11.5px; }
+
+  /* ============ tabs (page-level, MudTabs) ============ */
+  .mud-tabs{ display:flex; gap:4px; border-bottom:1px solid var(--mud-divider); margin-bottom:16px; }
+  .mud-tabs button{
+    appearance:none; border:none; background:transparent; padding:12px 16px; font:inherit; font-size:13px;
+    font-weight:500; color:var(--mud-text-secondary); cursor:pointer; border-bottom:2px solid transparent;
+  }
+  .mud-tabs button.active{ color:var(--mud-primary); border-bottom-color:var(--mud-primary); }
+
+  /* ============ timeline ============ */
+  .mud-timeline{ position:relative; padding-left:8px; }
+  .mud-timeline-item{ display:flex; gap:16px; position:relative; padding-bottom:22px; }
+  .mud-timeline-item:last-child{ padding-bottom:0; }
+  .mud-timeline-dot-wrap{ display:flex; flex-direction:column; align-items:center; }
+  .mud-timeline-dot{ width:14px; height:14px; border-radius:50%; background:var(--mud-primary); border:3px solid #fff; box-shadow:0 0 0 1px var(--mud-primary); flex:none; }
+  .mud-timeline-line{ flex:1; width:2px; background:var(--mud-divider); margin-top:2px; }
+  .mud-timeline-content{ flex:1; padding-bottom:2px; }
+  .mud-timeline-date{ font-size:11.5px; color:var(--mud-text-secondary); font-weight:500; margin-bottom:3px; }
+
+  /* ============ progress ============ */
+  .mud-progress{ height:6px; border-radius:3px; background:rgba(0,0,0,.08); overflow:hidden; }
+  .mud-progress i{ display:block; height:100%; background:var(--mud-primary); border-radius:3px; }
+
+  /* ============ dropzone (MudFileUpload) ============ */
+  .mud-dropzone{
+    border:2px dashed rgba(0,0,0,.23); border-radius:var(--mud-radius); padding:30px 20px; text-align:center;
+    display:flex; flex-direction:column; align-items:center; gap:10px; background:#FAFBFB;
+  }
+  .mud-dropzone .icon{ width:34px; height:34px; color:var(--mud-primary); }
+  .mud-dropzone b{ font-size:14px; font-weight:500; }
+  .mud-dropzone span{ font-size:12.5px; color:var(--mud-text-secondary); }
+
+  /* ============ misc ============ */
+  .mud-divider-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .mud-list-toolbar{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .mud-count{ font-size:12px; color:var(--mud-text-secondary); }
+  .row-actions{ display:flex; gap:2px; justify-content:flex-end; }
+  .two-col{ display:grid; grid-template-columns:1.4fr 1fr; gap:16px; }
+  @media (max-width:900px){ .two-col{ grid-template-columns:1fr; } }
+  .activity-item{ display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px solid var(--mud-divider); font-size:13px; }
+  .activity-item:last-child{ border-bottom:none; }
+  .activity-item .ico{ width:30px; height:30px; border-radius:50%; background:var(--mud-primary-lighten); color:var(--mud-primary-darken); display:flex; align-items:center; justify-content:center; flex:none; }
+  .activity-item .ico .icon{ width:15px; height:15px; }
+  .activity-item small{ display:block; color:var(--mud-text-secondary); font-size:11.5px; margin-top:2px; }
+
+  /* ============ login screen ============ */
+  .mud-login-shell{ display:grid; grid-template-columns:1fr 1fr; min-height:600px; }
+  @media (max-width:820px){ .mud-login-shell{ grid-template-columns:1fr; } }
+  .mud-login-aside{ background:var(--mud-dark); color:#fff; padding:48px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; }
+  .mud-login-aside h2{ font-family:var(--font-display); font-size:28px; font-weight:600; line-height:1.28; margin:0 0 12px; }
+  .mud-login-aside p{ font-size:14px; opacity:.82; line-height:1.6; margin:0; max-width:360px; }
+  .mud-login-aside .brand{ display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:600; font-size:18px; }
+  .mud-login-aside .brand .mark{ width:32px; height:32px; border-radius:8px; background:var(--mud-primary); display:flex; align-items:center; justify-content:center; }
+  .mud-login-aside .foot{ display:flex; align-items:center; gap:8px; font-size:12px; opacity:.7; }
+  @media (max-width:820px){ .mud-login-aside{ display:none; } }
+  .mud-login-main{ display:flex; align-items:center; justify-content:center; padding:40px; background:#fff; }
+  .mud-login-card{ width:100%; max-width:360px; }
+  .mud-login-card .eyebrow{ font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mud-primary); margin:0 0 6px; }
+  .mud-login-card h1{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 22px; }
+  .mud-login-card form{ display:flex; flex-direction:column; gap:16px; }
+  .mud-login-row{ display:flex; align-items:center; justify-content:space-between; font-size:12.5px; }
+  .mud-login-row a{ color:var(--mud-primary); text-decoration:none; }
+  .mud-login-footer{ margin-top:20px; font-size:12.5px; text-align:center; color:var(--mud-text-secondary); }
+  .mud-login-footer a{ color:var(--mud-primary); text-decoration:none; font-weight:500; }
+  .mud-prefix-input{ display:flex; align-items:center; border:1px solid rgba(0,0,0,.23); border-radius:8px; overflow:hidden; }
+  .mud-prefix-input span{ padding:10px 8px 10px 12px; font-size:12.5px; color:var(--mud-text-secondary); background:#FAFAFA; }
+  .mud-prefix-input input{ border:none; flex:1; padding:10px 12px 10px 0; font:inherit; font-size:13.5px; outline:none; }
+
+  /* chat bubbles (IA.5) */
+  .mud-chat-log{ display:flex; flex-direction:column; gap:10px; max-height:300px; overflow-y:auto; padding:4px; margin-bottom:10px; }
+  .mud-chat-bubble{ max-width:80%; padding:10px 14px; border-radius:14px; font-size:13px; line-height:1.5; }
+  .mud-chat-bubble.user{ align-self:flex-end; background:var(--mud-primary); color:#fff; border-bottom-right-radius:4px; }
+  .mud-chat-bubble.bot{ align-self:flex-start; background:#F1F3F2; border-bottom-left-radius:4px; }
+  .mud-chat-bubble .cite{ display:block; margin-top:6px; font-size:11px; color:var(--mud-primary); font-weight:500; }
+
+  /* entity review rows */
+  .mud-ent-row{ display:flex; align-items:center; gap:12px; padding:10px 4px; border-bottom:1px solid var(--mud-divider); }
+  .mud-ent-row:last-child{ border-bottom:none; }
+  .mud-ent-row .txt{ flex:1; font-size:13.5px; }
+  .mud-ent-row .txt small{ display:block; color:var(--mud-text-secondary); font-size:11.5px; margin-top:2px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2 13 13l-3.8 1.8L11 11z"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h5v-5h2v5h5v-9"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h4l2 2h7A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24"><path d="M8 3h6l4 4v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12h5M9.5 15.5h5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.3-4.3"/></symbol>
+    <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-2.5-1.6L13 21l-2.5-1.6L8 21l-2-1.6z"/><path d="M9 8h6M9 12h6"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10z"/><path d="M10 19a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24"><path d="m4 16 6-6 4 4 6-8"/><path d="M15 6h5v5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m8 11 4 4 4-4"/><path d="M5 17v2.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V17"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-timeline" viewBox="0 0 24 24"><path d="M4 12h16"/><circle cx="7" cy="12" r="2"/><circle cx="13.5" cy="12" r="2"/><circle cx="19" cy="12" r="1.4"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M11 4h6a1 1 0 0 1 1 1v6a1 1 0 0 1-.29.71l-8 8a1 1 0 0 1-1.42 0l-6-6a1 1 0 0 1 0-1.42l8-8A1 1 0 0 1 11 4z"/><circle cx="15.4" cy="8.6" r="1.3"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 19c0-3 2.5-5 6-5s6 2 6 5"/><circle cx="17.5" cy="9" r="2.3"/><path d="M15.8 12.1c2.3.5 3.9 2.1 3.9 4.4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v6c0 5-3 7.5-7 8.5-4-1-7-3.5-7-8.5V6z"/><path d="m9 12 2 2 4-4.2"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z"/></symbol>
+  </defs>
+</svg>
+
+<div class="compare-banner">
+  <b>Compañero del mockup original</b> — mismas 8 pantallas y los mismos datos, reconstruidas con el lenguaje visual real de MudBlazor (Material), no el diseño a medida.
+  <span class="tag">Fuente: mockup_pantallas_compas.html</span>
+  <span class="tag">Fuente de colores: :root de ese mismo archivo</span>
+</div>
+
+<nav class="switcher-bar" aria-label="Selector de pantalla">
+  <div class="switcher-brand"><span class="dot"></span>Compás <span style="font-weight:400;color:var(--mud-text-secondary);font-size:11px">&nbsp;· versión MudBlazor</span></div>
+  <div class="tabs" role="tablist" aria-label="Pantallas">
+    <button class="tab" role="tab" aria-selected="true" data-target="screen-login">Acceso</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="screen-dashboard">Panel principal</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="screen-ocr">Proceso OCR</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="screen-facturacion">Facturación</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="screen-busqueda">Búsqueda</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="screen-documentos">Documentos</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="screen-cronologia">Cronología</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="screen-entidades">Revisión de entidades</button>
+  </div>
+</nav>
+
+<div class="stage">
+  <div class="device">
+
+    <!-- ============ SCREEN 1 — LOGIN (MudBlazor) ============ -->
+    <section class="screen active" id="screen-login">
+      <div class="mud-login-shell">
+        <aside class="mud-login-aside">
+          <div class="brand"><span class="mark"><svg class="icon" style="width:18px;height:18px;color:#fff"><use href="#i-compass"/></svg></span>Compás</div>
+          <div>
+            <h2>El expediente, siempre a mano — y siempre al día.</h2>
+            <p>Gestión de expedientes, documentos y OCR para despachos, pensada para que nada se quede sin digitalizar.</p>
+          </div>
+          <div class="foot"><svg class="icon" style="width:14px;height:14px"><use href="#i-lock"/></svg>Conexión cifrada · datos alojados en la UE</div>
+        </aside>
+        <div class="mud-login-main">
+          <div class="mud-login-card">
+            <p class="eyebrow">Acceso al despacho</p>
+            <h1>Iniciar sesión</h1>
+            <form onsubmit="return false">
+              <div class="mud-field">
+                <label for="mli-tenant">Despacho</label>
+                <div class="mud-prefix-input">
+                  <span>compas.app/</span>
+                  <input id="mli-tenant" type="text" value="herrera-asociados">
+                </div>
+              </div>
+              <div class="mud-field">
+                <label for="mli-email">Correo electrónico</label>
+                <input id="mli-email" class="mud-input" type="email" value="m.alonso@herrera-asociados.es">
+              </div>
+              <div class="mud-field">
+                <label for="mli-pass">Contraseña</label>
+                <input id="mli-pass" class="mud-input" type="password" value="••••••••••••">
+              </div>
+              <div class="mud-login-row">
+                <label class="mud-field-check"><input type="checkbox" checked>Recordarme en este dispositivo</label>
+                <a href="#">¿Olvidaste tu contraseña?</a>
+              </div>
+              <button class="mud-btn mud-btn-filled mud-btn-block" type="submit">
+                <svg class="icon" style="width:15px;height:15px"><use href="#i-lock"/></svg>
+                Iniciar sesión
+              </button>
+            </form>
+            <p class="mud-login-footer">¿Despacho nuevo en Compás? <a href="#">Solicita acceso</a></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SCREEN 2 — PANEL PRINCIPAL (MudBlazor) ============ -->
+    <section class="screen" id="screen-dashboard">
+      <div class="mud-shell" data-drawer="closed" id="mshell-dash">
+        <header class="mud-appbar">
+          <button class="mud-iconbtn hamburger" data-drawer-toggle="mshell-dash" aria-label="Abrir menú"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <div class="appbar-brand"><span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass"/></svg></span>Compás</div>
+          <label class="mud-searchfield">
+            <svg class="icon" style="width:16px;height:16px"><use href="#i-search"/></svg>
+            <input type="text" placeholder="Buscar expedientes, documentos, clientes…">
+          </label>
+          <span class="appbar-spacer"></span>
+          <button class="mud-iconbtn" aria-label="Notificaciones"><svg class="icon"><use href="#i-bell"/></svg><span class="dot-badge"></span></button>
+          <div class="mud-userchip">
+            <span class="mud-avatar">MA</span>
+            <span class="who"><b>Marta Alonso</b><span>Herrera &amp; Asociados</span></span>
+            <svg class="icon" style="width:16px;height:16px;color:var(--mud-text-secondary)"><use href="#i-chev"/></svg>
+          </div>
+        </header>
+        <nav class="mud-drawer">
+          <a class="mud-navlink selected" href="#" data-goto-screen="screen-dashboard"><svg class="icon"><use href="#i-home"/></svg>Panel principal</a>
+          <div class="mud-navgroup-label">Expedientes</div>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-ocr"><svg class="icon"><use href="#i-upload"/></svg>OCR / Foliado</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-documentos"><svg class="icon"><use href="#i-files"/></svg>Documentos</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-busqueda"><svg class="icon"><use href="#i-search"/></svg>Búsqueda</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-cronologia"><svg class="icon"><use href="#i-timeline"/></svg>Cronología</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-entidades"><svg class="icon"><use href="#i-tag"/></svg>Revisión de entidades</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-users"/></svg>Clientes y RGPD</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-shield"/></svg>Auditoría</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-facturacion"><svg class="icon"><use href="#i-receipt"/></svg>Facturación</a>
+          <div class="mud-drawer-foot">
+            <span class="mark"><svg class="icon" style="width:15px;height:15px;color:#fff"><use href="#i-compass"/></svg></span>
+            <span><b>Herrera &amp; Asociados</b><span>Plan Despacho · 3 usuarios</span></span>
+          </div>
+        </nav>
+        <main class="mud-main">
+          <div class="mud-pagehead">
+            <h1>Panel principal</h1>
+            <span class="meta">martes, 8 de septiembre de 2026</span>
+          </div>
+
+          <div class="mud-stat-grid">
+            <div class="mud-stat-card">
+              <span class="label">Expedientes activos</span>
+              <span class="value tabular">47</span>
+              <span class="sub up"><svg class="icon" style="width:13px;height:13px"><use href="#i-trend"/></svg>+3 esta semana</span>
+            </div>
+            <div class="mud-stat-card">
+              <span class="label">Pendientes de OCR</span>
+              <span class="value tabular">12</span>
+              <span class="sub"><span class="mud-chip mud-chip-warning">en cola</span></span>
+            </div>
+            <div class="mud-stat-card">
+              <span class="label">Páginas procesadas / mes</span>
+              <span class="value tabular">3.214</span>
+              <span class="sub up"><svg class="icon" style="width:13px;height:13px"><use href="#i-trend"/></svg>+18% vs. agosto</span>
+            </div>
+            <div class="mud-stat-card">
+              <span class="label">Almacenamiento</span>
+              <span class="value tabular" style="font-size:18px">8,4 GB <span style="color:var(--mud-text-secondary);font-weight:400;font-size:13px">/ 50 GB</span></span>
+              <div class="mud-progress" style="margin-top:8px"><i style="width:17%"></i></div>
+            </div>
+          </div>
+
+          <div class="mud-card">
+            <h3>Plazos próximos <a href="#" class="mud-btn mud-btn-text mud-btn-sm">ver todos <svg class="icon" style="width:13px;height:13px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></a></h3>
+            <div class="mud-timeline">
+              <div class="mud-timeline-item">
+                <div class="mud-timeline-dot-wrap"><span class="mud-timeline-dot" style="background:var(--mud-error);box-shadow:0 0 0 1px var(--mud-error)"></span><span class="mud-timeline-line"></span></div>
+                <div class="mud-timeline-content">
+                  <b>Contestación a la demanda</b>
+                  <div class="mud-timeline-date">Expediente 2026/0143 — Rodríguez vs. Ayuntamiento de Valencia</div>
+                  <span class="mud-chip mud-chip-error">vence en 2 días</span> <span class="tabular" style="font-size:12px;color:var(--mud-text-secondary)">30 sept.</span>
+                </div>
+              </div>
+              <div class="mud-timeline-item">
+                <div class="mud-timeline-dot-wrap"><span class="mud-timeline-dot" style="background:var(--mud-warning);box-shadow:0 0 0 1px var(--mud-warning)"></span><span class="mud-timeline-line"></span></div>
+                <div class="mud-timeline-content">
+                  <b>Recurso de apelación — plazo de interposición</b>
+                  <div class="mud-timeline-date">Expediente 2026/0139 — García Serrano</div>
+                  <span class="mud-chip mud-chip-warning">vence en 5 días</span> <span class="tabular" style="font-size:12px;color:var(--mud-text-secondary)">3 oct.</span>
+                </div>
+              </div>
+              <div class="mud-timeline-item">
+                <div class="mud-timeline-dot-wrap"><span class="mud-timeline-dot" style="background:var(--mud-text-disabled);box-shadow:0 0 0 1px var(--mud-text-disabled)"></span></div>
+                <div class="mud-timeline-content">
+                  <b>Vista oral señalada</b>
+                  <div class="mud-timeline-date">Expediente 2026/0151 — García Serrano</div>
+                  <span class="mud-chip mud-chip-default">en 12 días</span> <span class="tabular" style="font-size:12px;color:var(--mud-text-secondary)">10 oct.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mud-card">
+            <div class="mud-list-toolbar">
+              <h3 style="margin:0;flex:1">Expedientes activos <span class="mud-count" id="exp-count">mostrando 6 de 47</span></h3>
+              <div class="mud-field" style="width:220px"><input class="mud-input" type="text" placeholder="Filtrar por número, cliente, materia…"></div>
+              <button class="mud-btn mud-btn-filled mud-btn-sm"><svg class="icon" style="width:14px;height:14px"><use href="#i-folder"/></svg>Nuevo expediente</button>
+            </div>
+            <div class="mud-table-wrap">
+              <table class="mud-table">
+                <thead><tr><th>Número</th><th>Cliente</th><th>Materia</th><th>Abogado responsable</th><th>Estado</th><th></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td class="tabular">2026/0143</td>
+                    <td>Rodríguez Marín, Antonio<small>vs. Ayuntamiento de Valencia</small></td>
+                    <td>Civil</td>
+                    <td><span class="mud-avatar" style="width:24px;height:24px;font-size:10px;display:inline-flex;vertical-align:middle;margin-right:6px">MA</span>Marta Alonso</td>
+                    <td><span class="mud-chip mud-chip-success">Activo</span></td>
+                    <td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td>
+                  </tr>
+                  <tr>
+                    <td class="tabular">2026/0139</td>
+                    <td>García Serrano, Beatriz</td>
+                    <td>Laboral</td>
+                    <td><span class="mud-avatar" style="width:24px;height:24px;font-size:10px;display:inline-flex;vertical-align:middle;margin-right:6px">DR</span>Diego Ruiz</td>
+                    <td><span class="mud-chip mud-chip-info">En trámite</span></td>
+                    <td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td>
+                  </tr>
+                  <tr>
+                    <td class="tabular">2026/0151</td>
+                    <td>García Serrano, Beatriz<small>Custodia y régimen de visitas</small></td>
+                    <td>Familia</td>
+                    <td><span class="mud-avatar" style="width:24px;height:24px;font-size:10px;display:inline-flex;vertical-align:middle;margin-right:6px">MA</span>Marta Alonso</td>
+                    <td><span class="mud-chip mud-chip-success">Activo</span></td>
+                    <td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td>
+                  </tr>
+                  <tr>
+                    <td class="tabular">2026/0132</td>
+                    <td>Martín Cobo, José<small>Reclamación de cantidad — impago proveedor</small></td>
+                    <td>Mercantil</td>
+                    <td><span class="mud-avatar" style="width:24px;height:24px;font-size:10px;display:inline-flex;vertical-align:middle;margin-right:6px">CS</span>Carmen Soto</td>
+                    <td><span class="mud-chip mud-chip-warning">Pendiente doc.</span></td>
+                    <td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td>
+                  </tr>
+                  <tr>
+                    <td class="tabular">2026/0128</td>
+                    <td>Comunidad Propietarios Ronda Sur 12</td>
+                    <td>Civil</td>
+                    <td style="color:var(--mud-text-disabled)">Sin asignar</td>
+                    <td><span class="mud-chip mud-chip-success">Activo</span></td>
+                    <td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td>
+                  </tr>
+                  <tr>
+                    <td class="tabular">2026/0091</td>
+                    <td>Hidalgo Torres, Marina</td>
+                    <td>Extranjería</td>
+                    <td><span class="mud-avatar" style="width:24px;height:24px;font-size:10px;display:inline-flex;vertical-align:middle;margin-right:6px">DR</span>Diego Ruiz</td>
+                    <td><span class="mud-chip mud-chip-default">Archivado</span></td>
+                    <td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="mud-card">
+              <h3>Actividad reciente</h3>
+              <div class="activity-item">
+                <span class="ico"><svg class="icon" style="width:15px;height:15px"><use href="#i-check"/></svg></span>
+                <span><b>OCR completado</b> en Sentencia_TC_68-2024.pdf — Expediente 2026/0143<small>hace 12 min · confianza media 0,94</small></span>
+              </div>
+              <div class="activity-item">
+                <span class="ico"><svg class="icon" style="width:15px;height:15px"><use href="#i-files"/></svg></span>
+                <span>Nueva notificación LexNET añadida al Expediente 2026/0139<small>hace 47 min</small></span>
+              </div>
+              <div class="activity-item">
+                <span class="ico"><svg class="icon" style="width:15px;height:15px"><use href="#i-folder"/></svg></span>
+                <span>Expediente 2026/0151 — García Serrano creado por Diego Ruiz<small>hoy, 09:14</small></span>
+              </div>
+            </div>
+            <div class="mud-card">
+              <h3>Accesos rápidos</h3>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <button class="mud-btn mud-btn-outlined"><svg class="icon" style="width:15px;height:15px"><use href="#i-folder"/></svg>Nuevo expediente</button>
+                <button class="mud-btn mud-btn-outlined" data-goto-screen="screen-ocr"><svg class="icon" style="width:15px;height:15px"><use href="#i-upload"/></svg>Subir documentos a OCR</button>
+                <button class="mud-btn mud-btn-outlined"><svg class="icon" style="width:15px;height:15px"><use href="#i-files"/></svg>Ver cola de OCR</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mud-card">
+            <h3>Cola de OCR <a href="#" class="mud-btn mud-btn-text mud-btn-sm">ver todo <svg class="icon" style="width:13px;height:13px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></a></h3>
+            <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--mud-divider)">
+              <span style="width:34px;height:34px;border-radius:8px;background:var(--mud-background);display:flex;align-items:center;justify-content:center;flex:none"><svg class="icon" style="width:16px;height:16px"><use href="#i-file"/></svg></span>
+              <span style="flex:1;font-size:13px">Sentencia_TC_68-2024.pdf<small style="display:block;color:var(--mud-text-secondary);font-size:11.5px">página 84 de 113 · Expediente 2026/0143</small></span>
+              <span style="width:120px"><div class="mud-progress"><i style="width:74%"></i></div></span>
+              <span class="mud-chip mud-chip-info">Procesando</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding:8px 0">
+              <span style="width:34px;height:34px;border-radius:8px;background:var(--mud-background);display:flex;align-items:center;justify-content:center;flex:none"><svg class="icon" style="width:16px;height:16px"><use href="#i-file"/></svg></span>
+              <span style="flex:1;font-size:13px">Prueba_pericial_arquitecto.pdf<small style="display:block;color:var(--mud-text-secondary);font-size:11.5px">46 páginas · Expediente 2026/0143</small></span>
+              <span style="width:120px"><div class="mud-progress"><i style="width:0%"></i></div></span>
+              <span class="mud-chip mud-chip-default">En cola</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- ============ SCREEN 3 — PROCESO OCR (MudBlazor) ============ -->
+    <section class="screen" id="screen-ocr">
+      <div class="mud-shell" data-drawer="closed" id="mshell-ocr">
+        <header class="mud-appbar">
+          <button class="mud-iconbtn hamburger" data-drawer-toggle="mshell-ocr" aria-label="Abrir menú"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <div class="appbar-brand"><span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass"/></svg></span>Compás</div>
+          <label class="mud-searchfield"><svg class="icon" style="width:16px;height:16px"><use href="#i-search"/></svg><input type="text" placeholder="Buscar expedientes, documentos, clientes…"></label>
+          <span class="appbar-spacer"></span>
+          <button class="mud-iconbtn" aria-label="Notificaciones"><svg class="icon"><use href="#i-bell"/></svg><span class="dot-badge"></span></button>
+          <div class="mud-userchip"><span class="mud-avatar">MA</span><span class="who"><b>Marta Alonso</b><span>Herrera &amp; Asociados</span></span><svg class="icon" style="width:16px;height:16px;color:var(--mud-text-secondary)"><use href="#i-chev"/></svg></div>
+        </header>
+        <nav class="mud-drawer">
+          <a class="mud-navlink" href="#" data-goto-screen="screen-dashboard"><svg class="icon"><use href="#i-home"/></svg>Panel principal</a>
+          <div class="mud-navgroup-label">Expedientes</div>
+          <a class="mud-navlink selected" href="#" data-goto-screen="screen-ocr"><svg class="icon"><use href="#i-upload"/></svg>OCR / Foliado</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-documentos"><svg class="icon"><use href="#i-files"/></svg>Documentos</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-busqueda"><svg class="icon"><use href="#i-search"/></svg>Búsqueda</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-cronologia"><svg class="icon"><use href="#i-timeline"/></svg>Cronología</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-entidades"><svg class="icon"><use href="#i-tag"/></svg>Revisión de entidades</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-users"/></svg>Clientes y RGPD</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-shield"/></svg>Auditoría</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-facturacion"><svg class="icon"><use href="#i-receipt"/></svg>Facturación</a>
+          <div class="mud-drawer-foot"><span class="mark"><svg class="icon" style="width:15px;height:15px;color:#fff"><use href="#i-compass"/></svg></span><span><b>Herrera &amp; Asociados</b><span>Plan Despacho · 3 usuarios</span></span></div>
+        </nav>
+        <main class="mud-main">
+          <div class="mud-crumbs">Expedientes <span style="margin:0 4px">/</span> Todos los expedientes <span style="margin:0 4px">/</span> <span class="current">OCR / Foliado</span></div>
+          <div class="mud-pagehead"><h1>Documentos y OCR</h1></div>
+
+          <div class="mud-card" style="margin-bottom:16px">
+            <div class="mud-dropzone">
+              <svg class="icon"><use href="#i-upload"/></svg>
+              <b>Arrastra tus documentos aquí</b>
+              <span>PDF o imágenes escaneadas (JPG, PNG, TIFF) · o busca en tu ordenador</span>
+              <button class="mud-btn mud-btn-outlined mud-btn-sm"><svg class="icon" style="width:14px;height:14px"><use href="#i-folder"/></svg>Examinar en tu ordenador…</button>
+            </div>
+            <div style="margin-top:10px;font-size:11.5px;color:var(--mud-text-secondary);display:flex;align-items:center;gap:6px"><svg class="icon" style="width:13px;height:13px"><use href="#i-lock"/></svg>Al subir, se te pedirá elegir a qué expediente pertenece cada documento.</div>
+          </div>
+
+          <div class="two-col">
+            <div class="mud-card">
+              <div class="mud-list-toolbar">
+                <div class="mud-field" style="width:200px"><input class="mud-input" type="text" placeholder="Filtrar por nombre de archivo…"></div>
+                <div class="mud-field" style="width:170px"><select class="mud-input" style="padding:9px 10px"><option>Expediente: Todos</option></select></div>
+                <span class="mud-count" style="margin-left:auto">mostrando 12 de 12</span>
+              </div>
+              <div class="mud-list-toolbar" style="border-top:1px solid var(--mud-divider);border-bottom:1px solid var(--mud-divider);padding:10px 0">
+                <label class="mud-field-check"><input type="checkbox" checked>Seleccionar todos</label>
+                <span class="mud-count">12 de 12 seleccionados</span>
+                <button class="mud-btn mud-btn-text mud-btn-sm" style="margin-left:auto">Ninguno</button>
+              </div>
+              <div class="mud-table-wrap">
+                <table class="mud-table">
+                  <tbody>
+                    <tr><td class="mud-checkbox-cell"><input type="checkbox" class="ocr-row-check" checked></td><td><span class="mud-chip mud-chip-default">PDF</span></td><td>Demanda_inicial.pdf<small>18 pág. · 2,1 MB · 2026/0143</small></td><td class="tabular">0,96</td><td><span class="mud-chip mud-chip-success"><svg class="icon" style="width:11px;height:11px"><use href="#i-check"/></svg>Completado</span></td></tr>
+                    <tr><td class="mud-checkbox-cell"><input type="checkbox" class="ocr-row-check" checked></td><td><span class="mud-chip mud-chip-default">PDF</span></td><td>Contestacion_demanda.pdf<small>22 pág. · 2,6 MB · 2026/0143</small></td><td class="tabular">0,93</td><td><span class="mud-chip mud-chip-success"><svg class="icon" style="width:11px;height:11px"><use href="#i-check"/></svg>Completado</span></td></tr>
+                    <tr><td class="mud-checkbox-cell"><input type="checkbox" class="ocr-row-check" checked></td><td><span class="mud-chip mud-chip-default">PDF</span></td><td>Sentencia_TC_68-2024.pdf<small>113 pág. · 9,8 MB · página 84/113 · 2026/0143</small></td><td style="width:120px"><div class="mud-progress"><i style="width:74%"></i></div></td><td><span class="mud-chip mud-chip-info">Procesando</span></td></tr>
+                    <tr><td class="mud-checkbox-cell"><input type="checkbox" class="ocr-row-check" checked></td><td><span class="mud-chip mud-chip-default">PDF</span></td><td>Prueba_pericial_arquitecto.pdf<small>46 pág. · 5,2 MB · 2026/0143</small></td><td></td><td><span class="mud-chip mud-chip-default">Pendiente</span></td></tr>
+                    <tr><td class="mud-checkbox-cell"><input type="checkbox" class="ocr-row-check" checked></td><td><span class="mud-chip mud-chip-default">PDF</span></td><td>Escrito_recurso_apelacion.pdf<small>14 pág. · 1,4 MB · 2026/0139</small></td><td></td><td><span class="mud-chip mud-chip-default">Pendiente</span></td></tr>
+                    <tr><td class="mud-checkbox-cell"><input type="checkbox" class="ocr-row-check" checked></td><td><span class="mud-chip mud-chip-default">PDF</span></td><td>Factura_procurador_0342.pdf<small>2 pág. · 0,3 MB · <span class="mud-chip mud-chip-warning" style="padding:1px 8px">factura detectada</span> · 2026/0132</small></td><td></td><td><span class="mud-chip mud-chip-default">Pendiente</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <aside class="mud-card">
+              <h3>Resumen del proceso</h3>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--mud-divider)"><span style="color:var(--mud-text-secondary)">Documentos seleccionados</span><b class="tabular">12 / 12</b></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--mud-divider)"><span style="color:var(--mud-text-secondary)">Páginas totales</span><b class="tabular">527</b></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--mud-divider)"><span style="color:var(--mud-text-secondary)">Tiempo estimado</span><b class="tabular">≈ 52 min</b></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;margin-bottom:10px"><span style="color:var(--mud-text-secondary)">Motor</span><b>PP-OCRv6</b></div>
+              <p style="font-size:11.5px;color:var(--mud-text-secondary);line-height:1.5">Todas las páginas pasan primero por el modelo <b>mobile</b> (rápido). Las que quedan con confianza &lt; 80% se reprocesan automáticamente con el modelo <b>medium</b>.</p>
+              <button class="mud-btn mud-btn-filled mud-btn-block"><svg class="icon" style="width:15px;height:15px"><use href="#i-play"/></svg>Procesar 12 documentos seleccionados</button>
+              <button class="mud-btn mud-btn-text mud-btn-sm" style="margin-top:6px">Ajustar umbral de confianza <svg class="icon" style="width:12px;height:12px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button>
+            </aside>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- ============ SCREEN 4 — FACTURACIÓN (MudBlazor) ============ -->
+    <section class="screen" id="screen-facturacion">
+      <div class="mud-shell" data-drawer="closed" id="mshell-fact">
+        <header class="mud-appbar">
+          <button class="mud-iconbtn hamburger" data-drawer-toggle="mshell-fact" aria-label="Abrir menú"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <div class="appbar-brand"><span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass"/></svg></span>Compás</div>
+          <label class="mud-searchfield"><svg class="icon" style="width:16px;height:16px"><use href="#i-search"/></svg><input type="text" placeholder="Buscar expedientes, documentos, clientes…"></label>
+          <span class="appbar-spacer"></span>
+          <button class="mud-iconbtn" aria-label="Notificaciones"><svg class="icon"><use href="#i-bell"/></svg><span class="dot-badge"></span></button>
+          <div class="mud-userchip"><span class="mud-avatar">MA</span><span class="who"><b>Marta Alonso</b><span>Herrera &amp; Asociados</span></span><svg class="icon" style="width:16px;height:16px;color:var(--mud-text-secondary)"><use href="#i-chev"/></svg></div>
+        </header>
+        <nav class="mud-drawer">
+          <a class="mud-navlink" href="#" data-goto-screen="screen-dashboard"><svg class="icon"><use href="#i-home"/></svg>Panel principal</a>
+          <div class="mud-navgroup-label">Expedientes</div>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-ocr"><svg class="icon"><use href="#i-upload"/></svg>OCR / Foliado</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-documentos"><svg class="icon"><use href="#i-files"/></svg>Documentos</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-busqueda"><svg class="icon"><use href="#i-search"/></svg>Búsqueda</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-cronologia"><svg class="icon"><use href="#i-timeline"/></svg>Cronología</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-entidades"><svg class="icon"><use href="#i-tag"/></svg>Revisión de entidades</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-users"/></svg>Clientes y RGPD</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-shield"/></svg>Auditoría</a>
+          <a class="mud-navlink selected" href="#" data-goto-screen="screen-facturacion"><svg class="icon"><use href="#i-receipt"/></svg>Facturación</a>
+          <div class="mud-drawer-foot"><span class="mark"><svg class="icon" style="width:15px;height:15px;color:#fff"><use href="#i-compass"/></svg></span><span><b>Herrera &amp; Asociados</b><span>Plan Despacho · 3 usuarios</span></span></div>
+        </nav>
+        <main class="mud-main">
+          <div class="mud-pagehead"><h1>Facturación</h1><span class="meta">Provisiones de fondos, facturas y registro de horas por expediente</span></div>
+
+          <div class="mud-stat-grid">
+            <div class="mud-stat-card"><span class="label">Facturado (últimos 30 días)</span><span class="value tabular">3.750 €</span><span class="sub up"><svg class="icon" style="width:13px;height:13px"><use href="#i-trend"/></svg>2 facturas emitidas</span></div>
+            <div class="mud-stat-card"><span class="label">Provisiones con saldo pendiente</span><span class="value tabular">2</span><span class="sub"><span class="mud-chip mud-chip-warning">1.100 € por aplicar</span></span></div>
+            <div class="mud-stat-card"><span class="label">Horas registradas sin facturar</span><span class="value tabular">12,5 h</span><span class="sub"><span class="mud-chip mud-chip-warning">expediente 2026/0143</span></span></div>
+            <div class="mud-stat-card"><span class="label">Exportaciones a gestoría</span><span class="value tabular">3</span><span class="sub">última: 31 ago. 2026</span></div>
+          </div>
+
+          <div class="mud-card">
+            <h3>Exportar para la gestoría</h3>
+            <div class="mud-divider-row">
+              <div class="mud-field" style="width:230px"><label>Periodo</label><select class="mud-input"><option>Mes actual (sept. 2026)</option><option>Mes anterior (agosto 2026)</option><option>Trimestre actual</option></select></div>
+              <button class="mud-btn mud-btn-filled" style="align-self:flex-end"><svg class="icon" style="width:15px;height:15px"><use href="#i-download"/></svg>Exportar CSV (facturas + provisiones)</button>
+              <span style="font-size:12px;color:var(--mud-text-secondary);flex:1;min-width:200px">Genera un CSV con fecha, expediente, cliente, concepto, importe y modo — listo para la gestoría externa.</span>
+            </div>
+          </div>
+
+          <div class="mud-card">
+            <div class="mud-list-toolbar">
+              <div class="mud-field" style="width:220px"><input class="mud-input" type="text" placeholder="Filtrar por expediente o cliente…"></div>
+              <div class="mud-field" style="width:160px"><select class="mud-input" style="padding:9px 10px"><option>Modo: Todos</option></select></div>
+              <span class="mud-count" style="margin-left:auto">mostrando 6 de 6</span>
+            </div>
+            <div class="mud-table-wrap">
+              <table class="mud-table">
+                <thead><tr><th>Expediente</th><th>Cliente</th><th>Modo</th><th>Provisión</th><th>Horas reg.</th><th>Facturado</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td class="tabular">2026/0143</td><td>Rodríguez Marín, Antonio<small>vs. Ayuntamiento de Valencia</small></td><td>Por horas</td><td class="tabular">500 €</td><td class="tabular">19 h</td><td class="tabular">1.615 €</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0139</td><td>García Serrano, Beatriz</td><td>Tanto alzado</td><td class="tabular">300 €</td><td class="tabular">—</td><td class="tabular">950 €</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0151</td><td>García Serrano, Beatriz<small>Custodia y régimen de visitas</small></td><td style="color:var(--mud-text-disabled)">Sin definir</td><td class="tabular">—</td><td class="tabular">—</td><td class="tabular">—</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0132</td><td>Martín Cobo, José<small>Reclamación de cantidad</small></td><td>Tanto alzado</td><td class="tabular">600 €</td><td class="tabular">—</td><td class="tabular">—</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0128</td><td>Comunidad Propietarios Ronda Sur 12</td><td>Tanto alzado</td><td class="tabular">—</td><td class="tabular">—</td><td class="tabular">1.200 €</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0091</td><td>Hidalgo Torres, Marina</td><td>Tanto alzado</td><td class="tabular">450 €</td><td class="tabular">—</td><td class="tabular">450 €</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- ============ SCREEN 5 — BÚSQUEDA (MudBlazor) ============ -->
+    <section class="screen" id="screen-busqueda">
+      <div class="mud-shell" data-drawer="closed" id="mshell-busqueda">
+        <header class="mud-appbar">
+          <button class="mud-iconbtn hamburger" data-drawer-toggle="mshell-busqueda" aria-label="Abrir menú"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <div class="appbar-brand"><span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass"/></svg></span>Compás</div>
+          <label class="mud-searchfield"><svg class="icon" style="width:16px;height:16px"><use href="#i-search"/></svg><input type="text" placeholder="Buscar expedientes, documentos, clientes…"></label>
+          <span class="appbar-spacer"></span>
+          <button class="mud-iconbtn" aria-label="Notificaciones"><svg class="icon"><use href="#i-bell"/></svg><span class="dot-badge"></span></button>
+          <div class="mud-userchip"><span class="mud-avatar">MA</span><span class="who"><b>Marta Alonso</b><span>Herrera &amp; Asociados</span></span><svg class="icon" style="width:16px;height:16px;color:var(--mud-text-secondary)"><use href="#i-chev"/></svg></div>
+        </header>
+        <nav class="mud-drawer">
+          <a class="mud-navlink" href="#" data-goto-screen="screen-dashboard"><svg class="icon"><use href="#i-home"/></svg>Panel principal</a>
+          <div class="mud-navgroup-label">Expedientes</div>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-ocr"><svg class="icon"><use href="#i-upload"/></svg>OCR / Foliado</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-documentos"><svg class="icon"><use href="#i-files"/></svg>Documentos</a>
+          <a class="mud-navlink selected" href="#" data-goto-screen="screen-busqueda"><svg class="icon"><use href="#i-search"/></svg>Búsqueda</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-cronologia"><svg class="icon"><use href="#i-timeline"/></svg>Cronología</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-entidades"><svg class="icon"><use href="#i-tag"/></svg>Revisión de entidades</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-users"/></svg>Clientes y RGPD</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-shield"/></svg>Auditoría</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-facturacion"><svg class="icon"><use href="#i-receipt"/></svg>Facturación</a>
+          <div class="mud-drawer-foot"><span class="mark"><svg class="icon" style="width:15px;height:15px;color:#fff"><use href="#i-compass"/></svg></span><span><b>Herrera &amp; Asociados</b><span>Plan Despacho · 3 usuarios</span></span></div>
+        </nav>
+        <main class="mud-main">
+          <div class="mud-pagehead"><h1>Búsqueda</h1><span class="meta">Coincidencia exacta + aproximada por trigramas, dentro de los documentos ya procesados de un expediente</span></div>
+
+          <div class="mud-card" style="margin-bottom:16px">
+            <div class="mud-divider-row">
+              <div class="mud-field" style="width:230px"><label>Expediente</label><select class="mud-input"><option>2026/0143 — Rodríguez Marín</option></select></div>
+              <div class="mud-field" style="flex:1;min-width:260px"><label>Término de búsqueda</label><textarea class="mud-input" rows="1" placeholder="p. ej. ayuntamiento, traslado, sentencia…">ayuntamiento</textarea></div>
+              <button class="mud-btn mud-btn-filled" style="align-self:flex-end"><svg class="icon" style="width:15px;height:15px"><use href="#i-search"/></svg>Buscar</button>
+            </div>
+          </div>
+
+          <div class="mud-card">
+            <div class="mud-divider-row" style="margin-bottom:12px">
+              <span class="mud-chip mud-chip-success"><svg class="icon" style="width:11px;height:11px"><use href="#i-check"/></svg>Coincidencia exacta</span>
+              <span style="font-size:12px;color:var(--mud-text-secondary)"><span class="mud-chip mud-chip-warning">Coincidencia aproximada</span> posible error de OCR — la palabra real podría ser distinta</span>
+            </div>
+            <div class="mud-count" style="margin-bottom:10px">3 resultados en 2 documentos</div>
+            <div class="mud-ent-row">
+              <div class="txt"><b>Demanda_inicial.pdf</b>, página 2<small>«...se interpone la presente demanda contra el <u>Ayuntamiento</u> de Valencia por responsabilidad patrimonial...»</small></div>
+              <span class="mud-chip mud-chip-success"><svg class="icon" style="width:11px;height:11px"><use href="#i-check"/></svg>exacta</span>
+            </div>
+            <div class="mud-ent-row">
+              <div class="txt"><b>Contestacion_demanda.pdf</b>, página 1<small>«...representación del <u>Ayintamiento</u> de Valencia, conforme al poder que se acompaña...»</small></div>
+              <span class="mud-chip mud-chip-warning">aproximada</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- ============ SCREEN 6 — DOCUMENTOS (MudBlazor) ============ -->
+    <section class="screen" id="screen-documentos">
+      <div class="mud-shell" data-drawer="closed" id="mshell-doc">
+        <header class="mud-appbar">
+          <button class="mud-iconbtn hamburger" data-drawer-toggle="mshell-doc" aria-label="Abrir menú"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <div class="appbar-brand"><span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass"/></svg></span>Compás</div>
+          <label class="mud-searchfield"><svg class="icon" style="width:16px;height:16px"><use href="#i-search"/></svg><input type="text" placeholder="Buscar expedientes, documentos, clientes…"></label>
+          <span class="appbar-spacer"></span>
+          <button class="mud-iconbtn" aria-label="Notificaciones"><svg class="icon"><use href="#i-bell"/></svg><span class="dot-badge"></span></button>
+          <div class="mud-userchip"><span class="mud-avatar">MA</span><span class="who"><b>Marta Alonso</b><span>Herrera &amp; Asociados</span></span><svg class="icon" style="width:16px;height:16px;color:var(--mud-text-secondary)"><use href="#i-chev"/></svg></div>
+        </header>
+        <nav class="mud-drawer">
+          <a class="mud-navlink" href="#" data-goto-screen="screen-dashboard"><svg class="icon"><use href="#i-home"/></svg>Panel principal</a>
+          <div class="mud-navgroup-label">Expedientes</div>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-ocr"><svg class="icon"><use href="#i-upload"/></svg>OCR / Foliado</a>
+          <a class="mud-navlink selected" href="#" data-goto-screen="screen-documentos"><svg class="icon"><use href="#i-files"/></svg>Documentos</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-busqueda"><svg class="icon"><use href="#i-search"/></svg>Búsqueda</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-cronologia"><svg class="icon"><use href="#i-timeline"/></svg>Cronología</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-entidades"><svg class="icon"><use href="#i-tag"/></svg>Revisión de entidades</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-users"/></svg>Clientes y RGPD</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-shield"/></svg>Auditoría</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-facturacion"><svg class="icon"><use href="#i-receipt"/></svg>Facturación</a>
+          <div class="mud-drawer-foot"><span class="mark"><svg class="icon" style="width:15px;height:15px;color:#fff"><use href="#i-compass"/></svg></span><span><b>Herrera &amp; Asociados</b><span>Plan Despacho · 3 usuarios</span></span></div>
+        </nav>
+        <main class="mud-main">
+          <div class="mud-pagehead"><h1>Documentos</h1><span class="meta">Todos los documentos de cada expediente en un solo sitio — cargados a mano, escaneados por OCR o generados desde plantilla</span></div>
+
+          <div class="mud-stat-grid">
+            <div class="mud-stat-card"><span class="label">Documentos totales</span><span class="value tabular">12</span><span class="sub">en 6 expedientes</span></div>
+            <div class="mud-stat-card"><span class="label">Generados desde plantilla</span><span class="value tabular">4</span><span class="sub"><span class="mud-chip mud-chip-warning">2 sin marcar como versión final</span></span></div>
+            <div class="mud-stat-card"><span class="label">Cargados manualmente</span><span class="value tabular">6</span><span class="sub">sin pasar por OCR</span></div>
+            <div class="mud-stat-card"><span class="label">Detectados por OCR</span><span class="value tabular">2</span><span class="sub"><button class="mud-btn mud-btn-text mud-btn-sm" style="padding:0">ver en OCR/Foliado</button></span></div>
+          </div>
+
+          <div class="mud-card">
+            <div class="mud-list-toolbar">
+              <div class="mud-field" style="width:220px"><input class="mud-input" type="text" placeholder="Filtrar por expediente o cliente…"></div>
+              <div class="mud-field" style="width:160px"><select class="mud-input" style="padding:9px 10px"><option>Origen: Todos</option></select></div>
+              <span class="mud-count" style="margin-left:auto">mostrando 6 de 6</span>
+            </div>
+            <div class="mud-table-wrap">
+              <table class="mud-table">
+                <thead><tr><th>Expediente</th><th>Cliente</th><th>Documentos</th><th>Plantilla</th><th>Sin v. final</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td class="tabular">2026/0143</td><td>Rodríguez Marín, Antonio<small>vs. Ayuntamiento de Valencia</small></td><td class="tabular">4</td><td class="tabular">1</td><td class="tabular"><span class="mud-chip mud-chip-warning">1</span></td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0139</td><td>García Serrano, Beatriz</td><td class="tabular">3</td><td class="tabular">2</td><td class="tabular"><span class="mud-chip mud-chip-warning">1</span></td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0151</td><td>García Serrano, Beatriz<small>Custodia y régimen de visitas</small></td><td class="tabular">1</td><td class="tabular">0</td><td class="tabular">0</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0132</td><td>Martín Cobo, José<small>Reclamación de cantidad</small></td><td class="tabular">2</td><td class="tabular">1</td><td class="tabular">0</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0128</td><td>Comunidad Propietarios Ronda Sur 12</td><td class="tabular">1</td><td class="tabular">0</td><td class="tabular">0</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                  <tr><td class="tabular">2026/0091</td><td>Hidalgo Torres, Marina</td><td class="tabular">1</td><td class="tabular">0</td><td class="tabular">0</td><td class="row-actions"><button class="mud-iconbtn" style="width:32px;height:32px"><svg class="icon" style="width:16px;height:16px"><use href="#i-chev" style="transform:rotate(-90deg)"/></svg></button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- ============ SCREEN 7 — CRONOLOGÍA (MudBlazor) ============ -->
+    <section class="screen" id="screen-cronologia">
+      <div class="mud-shell" data-drawer="closed" id="mshell-cro">
+        <header class="mud-appbar">
+          <button class="mud-iconbtn hamburger" data-drawer-toggle="mshell-cro" aria-label="Abrir menú"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <div class="appbar-brand"><span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass"/></svg></span>Compás</div>
+          <label class="mud-searchfield"><svg class="icon" style="width:16px;height:16px"><use href="#i-search"/></svg><input type="text" placeholder="Buscar expedientes, documentos, clientes…"></label>
+          <span class="appbar-spacer"></span>
+          <button class="mud-iconbtn" aria-label="Notificaciones"><svg class="icon"><use href="#i-bell"/></svg><span class="dot-badge"></span></button>
+          <div class="mud-userchip"><span class="mud-avatar">MA</span><span class="who"><b>Marta Alonso</b><span>Herrera &amp; Asociados</span></span><svg class="icon" style="width:16px;height:16px;color:var(--mud-text-secondary)"><use href="#i-chev"/></svg></div>
+        </header>
+        <nav class="mud-drawer">
+          <a class="mud-navlink" href="#" data-goto-screen="screen-dashboard"><svg class="icon"><use href="#i-home"/></svg>Panel principal</a>
+          <div class="mud-navgroup-label">Expedientes</div>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-ocr"><svg class="icon"><use href="#i-upload"/></svg>OCR / Foliado</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-documentos"><svg class="icon"><use href="#i-files"/></svg>Documentos</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-busqueda"><svg class="icon"><use href="#i-search"/></svg>Búsqueda</a>
+          <a class="mud-navlink selected" href="#" data-goto-screen="screen-cronologia"><svg class="icon"><use href="#i-timeline"/></svg>Cronología</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-entidades"><svg class="icon"><use href="#i-tag"/></svg>Revisión de entidades</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-users"/></svg>Clientes y RGPD</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-shield"/></svg>Auditoría</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-facturacion"><svg class="icon"><use href="#i-receipt"/></svg>Facturación</a>
+          <div class="mud-drawer-foot"><span class="mark"><svg class="icon" style="width:15px;height:15px;color:#fff"><use href="#i-compass"/></svg></span><span><b>Herrera &amp; Asociados</b><span>Plan Despacho · 3 usuarios</span></span></div>
+        </nav>
+        <main class="mud-main">
+          <div class="mud-pagehead"><h1>Cronología</h1><span class="meta">Línea de tiempo de solo lectura de fechas confirmadas, más un chat que responde citando siempre su fuente</span></div>
+
+          <div class="mud-card" style="margin-bottom:16px">
+            <div class="mud-field" style="max-width:280px"><label>Expediente</label><select class="mud-input"><option>2026/0143 — Rodríguez Marín</option></select></div>
+          </div>
+
+          <div class="two-col">
+            <div class="mud-card">
+              <h3>Línea de tiempo</h3>
+              <div class="mud-timeline">
+                <div class="mud-timeline-item">
+                  <div class="mud-timeline-dot-wrap"><span class="mud-timeline-dot"></span><span class="mud-timeline-line"></span></div>
+                  <div class="mud-timeline-content"><div class="mud-timeline-date">2 de junio de 2026</div><b>Apertura del expediente</b> — demanda por responsabilidad patrimonial contra el Ayuntamiento de Valencia.<span class="cite" style="display:block;margin-top:4px;font-size:11px;color:var(--mud-primary)">Demanda_inicial.pdf, pág. 1</span></div>
+                </div>
+                <div class="mud-timeline-item">
+                  <div class="mud-timeline-dot-wrap"><span class="mud-timeline-dot"></span><span class="mud-timeline-line"></span></div>
+                  <div class="mud-timeline-content"><div class="mud-timeline-date">14 de julio de 2026</div><b>Contestación a la demanda</b> presentada por el Ayuntamiento.<span class="cite" style="display:block;margin-top:4px;font-size:11px;color:var(--mud-primary)">Contestacion_demanda.pdf, pág. 1</span></div>
+                </div>
+                <div class="mud-timeline-item">
+                  <div class="mud-timeline-dot-wrap"><span class="mud-timeline-dot" style="background:var(--mud-error);box-shadow:0 0 0 1px var(--mud-error)"></span></div>
+                  <div class="mud-timeline-content"><div class="mud-timeline-date">30 de septiembre de 2026</div><b>Plazo de contestación</b> — vence en 2 días.<span class="cite" style="display:block;margin-top:4px;font-size:11px;color:var(--mud-primary)">Plazo confirmado por el abogado</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="mud-card">
+              <h3>Chat con citas</h3>
+              <div class="mud-chat-log">
+                <div class="mud-chat-bubble user">¿Cuándo se presentó la contestación a la demanda?</div>
+                <div class="mud-chat-bubble bot">La contestación se presentó el 14 de julio de 2026.<span class="cite">Contestacion_demanda.pdf, página 1</span></div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <input class="mud-input" style="flex:1" placeholder="Escribe tu pregunta…">
+                <button class="mud-iconbtn" style="background:var(--mud-primary);color:#fff"><svg class="icon" style="width:17px;height:17px"><use href="#i-send"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- ============ SCREEN 8 — REVISIÓN DE ENTIDADES (MudBlazor) ============ -->
+    <section class="screen" id="screen-entidades">
+      <div class="mud-shell" data-drawer="closed" id="mshell-ent">
+        <header class="mud-appbar">
+          <button class="mud-iconbtn hamburger" data-drawer-toggle="mshell-ent" aria-label="Abrir menú"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <div class="appbar-brand"><span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass"/></svg></span>Compás</div>
+          <label class="mud-searchfield"><svg class="icon" style="width:16px;height:16px"><use href="#i-search"/></svg><input type="text" placeholder="Buscar expedientes, documentos, clientes…"></label>
+          <span class="appbar-spacer"></span>
+          <button class="mud-iconbtn" aria-label="Notificaciones"><svg class="icon"><use href="#i-bell"/></svg><span class="dot-badge"></span></button>
+          <div class="mud-userchip"><span class="mud-avatar">MA</span><span class="who"><b>Marta Alonso</b><span>Herrera &amp; Asociados</span></span><svg class="icon" style="width:16px;height:16px;color:var(--mud-text-secondary)"><use href="#i-chev"/></svg></div>
+        </header>
+        <nav class="mud-drawer">
+          <a class="mud-navlink" href="#" data-goto-screen="screen-dashboard"><svg class="icon"><use href="#i-home"/></svg>Panel principal</a>
+          <div class="mud-navgroup-label">Expedientes</div>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-ocr"><svg class="icon"><use href="#i-upload"/></svg>OCR / Foliado</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-documentos"><svg class="icon"><use href="#i-files"/></svg>Documentos</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-busqueda"><svg class="icon"><use href="#i-search"/></svg>Búsqueda</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-cronologia"><svg class="icon"><use href="#i-timeline"/></svg>Cronología</a>
+          <a class="mud-navlink selected" href="#" data-goto-screen="screen-entidades"><svg class="icon"><use href="#i-tag"/></svg>Revisión de entidades</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-users"/></svg>Clientes y RGPD</a>
+          <a class="mud-navlink" href="#"><svg class="icon"><use href="#i-shield"/></svg>Auditoría</a>
+          <a class="mud-navlink" href="#" data-goto-screen="screen-facturacion"><svg class="icon"><use href="#i-receipt"/></svg>Facturación</a>
+          <div class="mud-drawer-foot"><span class="mark"><svg class="icon" style="width:15px;height:15px;color:#fff"><use href="#i-compass"/></svg></span><span><b>Herrera &amp; Asociados</b><span>Plan Despacho · 3 usuarios</span></span></div>
+        </nav>
+        <main class="mud-main">
+          <div class="mud-pagehead"><h1>Revisión de entidades</h1><span class="meta">Fechas e importes esperan tu confirmación; personas y empresas se dan por buenas automáticamente salvo que las descartes</span></div>
+
+          <div class="mud-card" style="margin-bottom:16px">
+            <div class="mud-field" style="max-width:280px"><label>Expediente</label><select class="mud-input"><option>2026/0143 — Rodríguez Marín</option></select></div>
+          </div>
+
+          <div class="mud-tabs">
+            <button class="active">Fechas <span class="mud-chip mud-chip-warning" style="margin-left:6px;padding:1px 8px">2 por revisar</span></button>
+            <button>Importes <span class="mud-chip mud-chip-warning" style="margin-left:6px;padding:1px 8px">1 por revisar</span></button>
+            <button>Personas (3)</button>
+            <button>Empresas (2)</button>
+          </div>
+
+          <div class="mud-card">
+            <div class="mud-ent-row">
+              <div class="txt"><b>30 de septiembre de 2026</b> — plazo de contestación<small>Demanda_inicial.pdf, página 3</small></div>
+              <button class="mud-btn mud-btn-outlined mud-btn-sm">Descartar</button>
+              <button class="mud-btn mud-btn-filled mud-btn-sm"><svg class="icon" style="width:14px;height:14px"><use href="#i-check"/></svg>Confirmar</button>
+            </div>
+            <div class="mud-ent-row">
+              <div class="txt"><b>14 de julio de 2026</b> — fecha de contestación<small>Contestacion_demanda.pdf, página 1</small></div>
+              <button class="mud-btn mud-btn-outlined mud-btn-sm">Descartar</button>
+              <button class="mud-btn mud-btn-filled mud-btn-sm"><svg class="icon" style="width:14px;height:14px"><use href="#i-check"/></svg>Confirmar</button>
+            </div>
+          </div>
+
+          <div class="mud-card" style="margin-top:16px">
+            <h3 style="display:flex;align-items:center;gap:8px">Personas <span class="mud-chip mud-chip-success">confirmadas automáticamente</span></h3>
+            <div class="mud-ent-row"><div class="txt"><b>Antonio Rodríguez Marín</b><small>Demanda_inicial.pdf, página 1</small></div><span class="mud-chip mud-chip-success"><svg class="icon" style="width:11px;height:11px"><use href="#i-check"/></svg>Confirmada</span><button class="mud-btn mud-btn-text mud-btn-sm">Descartar</button></div>
+            <div class="mud-ent-row"><div class="txt"><b>Marta Alonso</b><small>Contestacion_demanda.pdf, página 4</small></div><span class="mud-chip mud-chip-success"><svg class="icon" style="width:11px;height:11px"><use href="#i-check"/></svg>Confirmada</span><button class="mud-btn mud-btn-text mud-btn-sm">Descartar</button></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+  function switchScreen(targetId){
+    document.querySelectorAll('.tab').forEach(function(t){ t.setAttribute('aria-selected', t.dataset.target === targetId ? 'true' : 'false'); });
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.toggle('active', s.id === targetId); });
+  }
+  document.querySelectorAll('.tab').forEach(function(tab){ tab.addEventListener('click', function(){ switchScreen(tab.dataset.target); }); });
+  document.querySelectorAll('[data-goto-screen]').forEach(function(el){
+    el.addEventListener('click', function(e){ e.preventDefault(); switchScreen(el.dataset.gotoScreen); });
+  });
+  document.querySelectorAll('[data-drawer-toggle]').forEach(function(el){
+    el.addEventListener('click', function(){
+      var shell = document.getElementById(el.dataset.drawerToggle);
+      if(!shell) return;
+      shell.dataset.drawer = shell.dataset.drawer === 'open' ? 'closed' : 'open';
+    });
+  });
+  document.querySelectorAll('.mud-tabs button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      btn.parentElement.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

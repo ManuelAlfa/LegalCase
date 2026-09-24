@@ -1,0 +1,146 @@
+@page "/login"
+@layout LoginLayout
+@inject AuthApiClient AuthApiClient
+@inject TokenProvider TokenProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Iniciar sesión — Compás</PageTitle>
+
+<div class="cps-login-page">
+    <div class="cps-login-shell">
+        <aside class="cps-login-aside">
+            <div class="brand">
+                <span class="mark"><svg class="icon" style="width:18px;height:18px;color:#fff"><use href="#i-compass" /></svg></span>
+                Compás
+            </div>
+            <div>
+                <h2>El expediente, siempre a mano — y siempre al día.</h2>
+                <p>Gestión de expedientes, documentos y OCR para despachos, pensada para que nada se quede sin digitalizar.</p>
+            </div>
+            <div class="foot">
+                <svg class="icon" style="width:14px;height:14px"><use href="#i-lock" /></svg>
+                Conexión cifrada · datos alojados en la UE
+            </div>
+        </aside>
+        <div class="cps-login-main">
+            <div class="cps-login-card">
+                <p class="eyebrow">Acceso al despacho</p>
+                <h1>Iniciar sesión</h1>
+
+                @if (_errorLogin is not null)
+                {
+                    <div class="cps-alert-error" style="margin-bottom:14px" role="alert">
+                        <svg class="icon" style="width:16px;height:16px"><use href="#i-x" /></svg>
+                        @_errorLogin
+                    </div>
+                }
+
+                <EditForm Model="_modelo" OnValidSubmit="IniciarSesionAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="cps-field">
+                        <label for="li-tenant">Despacho</label>
+                        <div class="cps-prefix-input">
+                            <span>compas.app/</span>
+                            <input id="li-tenant" type="text" @bind="_modelo.TenantId" />
+                        </div>
+                        <ValidationMessage For="() => _modelo.TenantId" class="validation-message" />
+                    </div>
+
+                    <div class="cps-field">
+                        <label for="li-email">Correo electrónico</label>
+                        <InputText id="li-email" class="cps-input" type="email" @bind-Value="_modelo.Email" />
+                        <ValidationMessage For="() => _modelo.Email" class="validation-message" />
+                    </div>
+
+                    <div class="cps-field">
+                        <label for="li-pass">Contraseña</label>
+                        <InputText id="li-pass" class="cps-input" type="password" @bind-Value="_modelo.Password" />
+                        <ValidationMessage For="() => _modelo.Password" class="validation-message" />
+                    </div>
+
+                    <div class="cps-login-row">
+                        <label class="cps-field-check">
+                            <input type="checkbox" @bind="_modelo.Recordarme" />
+                            Recordarme en este dispositivo
+                        </label>
+                        <a href="#">¿Olvidaste tu contraseña?</a>
+                    </div>
+
+                    <button class="cps-btn cps-btn-filled cps-btn-block" type="submit" disabled="@_enviando">
+                        <svg class="icon" style="width:15px;height:15px"><use href="#i-lock" /></svg>
+                        @(_enviando ? "Accediendo…" : "Iniciar sesión")
+                    </button>
+                </EditForm>
+
+                <p class="cps-login-footer">¿Despacho nuevo en Compás? <a href="#">Solicita acceso</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // "Despacho/Correo/Contraseña" son el aspecto final del login (Opción A,
+    // decisión de Manuel 2026-09-19) — por dentro sigue llamando a
+    // POST /api/auth/dev-token mientras no exista login real (tarea 3.1).
+    // El campo "Despacho" toma directamente el GUID del tenant (sin buscador
+    // de slug todavía, no hay endpoint para resolverlo) — pre-rellenado con
+    // el tenant de la demo sembrada por seed_datos_ficticios.sql.
+    private readonly ModeloLogin _modelo = new()
+    {
+        TenantId = "00000000-0000-0000-0000-000000000001",
+        Email = "marta.alonso@herreraasociados.es",
+        Password = "demo",
+    };
+
+    private bool _enviando;
+    private string? _errorLogin;
+
+    private async Task IniciarSesionAsync()
+    {
+        _errorLogin = null;
+
+        if (!Guid.TryParse(_modelo.TenantId, out var tenantId))
+        {
+            _errorLogin = "El despacho indicado no es válido (se espera el identificador del tenant mientras no exista un login real).";
+            return;
+        }
+
+        _enviando = true;
+        try
+        {
+            var respuesta = await AuthApiClient.ObtenerDevTokenAsync(tenantId);
+            if (respuesta is null)
+            {
+                _errorLogin = "No se pudo iniciar sesión: la Api no devolvió un token válido.";
+                return;
+            }
+
+            await TokenProvider.EstablecerTokenAsync(respuesta.AccessToken, respuesta.ExpiresAtUtc);
+            Navigation.NavigateTo("/", forceLoad: false);
+        }
+        catch (HttpRequestException)
+        {
+            _errorLogin = "No se pudo conectar con la Api. Comprueba que esté en marcha e inténtalo de nuevo.";
+        }
+        finally
+        {
+            _enviando = false;
+        }
+    }
+
+    private class ModeloLogin
+    {
+        [Required(ErrorMessage = "Indica el despacho.")]
+        public string TenantId { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Indica tu correo electrónico.")]
+        [EmailAddress(ErrorMessage = "Ese correo no parece válido.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Indica tu contraseña.")]
+        public string Password { get; set; } = string.Empty;
+
+        public bool Recordarme { get; set; } = true;
+    }
+}

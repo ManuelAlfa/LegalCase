@@ -1,0 +1,152 @@
+@* Layout de la aplicación autenticada (tarea 6.2): app-shell con MudAppBar
+   y MudDrawer traducidos casi literalmente de mockup_pantallas_compas_mudblazor.html
+   (clases .cps-shell/.cps-appbar/.cps-drawer/.cps-navlink, no los
+   componentes MudAppBar/MudDrawer reales de MudBlazor — decisión de
+   fidelidad visual ya explicada en la tarea 6.1 del plan de desarrollo). *@
+@inherits LayoutComponentBase
+@inject TokenProvider TokenProvider
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<MudThemeProvider Theme="CompasTheme.Theme" IsDarkMode="false" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<IconSprite />
+
+@* Hasta saber si hay sesión no se renderiza el shell: si se renderizara
+   @Body antes, la página hija se inicializaría y llamaría a la Api con el
+   token todavía sin restaurar, recibiría un 401 y eso cerraría la sesión
+   recién recuperada (fallo real: la sesión no sobrevivía a un F5). *@
+@if (!_sesionComprobada)
+{
+    <div class="cps-cargando-sesion">Cargando…</div>
+}
+else
+{
+<div class="cps-shell">
+    <header class="cps-appbar">
+        <button class="cps-iconbtn hamburger" @onclick="AlternarDrawer" aria-label="Abrir menú">
+            <svg class="icon"><use href="#i-menu" /></svg>
+        </button>
+        <a class="appbar-brand" href="/">
+            <span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass" /></svg></span>
+            Compás
+        </a>
+        <label class="cps-searchfield">
+            <svg class="icon" style="width:16px;height:16px"><use href="#i-search" /></svg>
+            <input type="text" placeholder="Buscar expedientes, documentos, clientes…" disabled title="Búsqueda: tarea 6.6, todavía no implementada" />
+        </label>
+        <span class="appbar-spacer"></span>
+        @* Sin punto rojo de aviso (a diferencia del mockup): no hay todavía
+           un origen real de notificaciones que contar — mostrar un aviso
+           falso sería inventar un dato, igual que ya se decidió para las
+           tarjetas de estadística de la tarea 6.3. *@
+        <button class="cps-iconbtn" aria-label="Notificaciones" disabled title="Notificaciones: sin implementar todavía">
+            <svg class="icon"><use href="#i-bell" /></svg>
+        </button>
+        @* Desplegable propio en Razor+CSS, no MudMenu: el popover de
+           MudBlazor no llega a abrirse en esta pantalla y el cierre de
+           sesión no puede depender de eso. Coherente además con la
+           estrategia del plan: el chrome de la aplicación (appbar, drawer)
+           se construye en Razor+CSS plano y los componentes de MudBlazor se
+           reservan para donde hace falta su comportamiento. *@
+        <div class="cps-menu-usuario">
+            <button type="button" class="cps-userchip" @onclick="AlternarMenuUsuario"
+                    aria-haspopup="menu" aria-expanded="@(_menuUsuarioAbierto ? "true" : "false")">
+                <span class="cps-avatar">T</span>
+                <span class="who"><b>Teresa</b><span>Herrera &amp; Asociados</span></span>
+                <svg class="icon cps-chev-menu @(_menuUsuarioAbierto ? "abierto" : "")"
+                     style="width:16px;height:16px;color:var(--mud-text-secondary)"><use href="#i-chev" /></svg>
+            </button>
+
+            @if (_menuUsuarioAbierto)
+            {
+                <div class="cps-menu-fondo" @onclick="CerrarMenuUsuario"></div>
+                <div class="cps-menu-panel" role="menu">
+                    <button type="button" class="cps-menu-item" role="menuitem" @onclick="CerrarSesion">
+                        <svg class="icon" style="width:15px;height:15px"><use href="#i-lock" /></svg>
+                        Cerrar sesión
+                    </button>
+                </div>
+            }
+        </div>
+    </header>
+
+    <nav class="cps-drawer @(_drawerAbierto ? "open" : "")">
+        <EnlaceNav Ruta="/" Icono="i-home" Texto="Panel principal" />
+        <div class="cps-navgroup-label">Expedientes</div>
+        <EnlaceNav Ruta="/expedientes" Icono="i-folder" Texto="Expedientes" />
+        <EnlaceNav Ruta="/clientes" Icono="i-users" Texto="Clientes" />
+        @* Auditoría (tarea 6.2) oculta a propósito: el criterio de terminado
+           pide que solo la vea el rol Administrador, pero ese rol no existe
+           en RolUsuario (Socio/Abogado/ProcuradorGraduadoSocial/Administrativo)
+           y el JWT de dev-token no lleva ningún claim de usuario/rol todavía
+           — no hay forma real de comprobar el rol hasta que exista login
+           real (tarea 3.1). Ocultarla del todo es la opción segura mientras
+           tanto: nadie puede demostrar ser administrador, así que nadie sin
+           serlo la ve. *@
+    </nav>
+
+    <main class="cps-main">
+        @Body
+    </main>
+</div>
+}
+
+@code {
+    private bool _drawerAbierto;
+    private bool _menuUsuarioAbierto;
+    private bool _sesionComprobada;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Guarda de sesión de toda la aplicación: cualquier página que use
+        // este layout exige un token válido. Se restaura primero la sesión
+        // guardada en el navegador (sobrevive a un F5) y solo después se
+        // decide si hay que ir al login.
+        await TokenProvider.RestaurarAsync();
+
+        if (!TokenProvider.HaySesionValida)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        TokenProvider.CambioSesion += AlCambiarSesion;
+        _sesionComprobada = true;
+    }
+
+    private void AlternarDrawer() => _drawerAbierto = !_drawerAbierto;
+
+    private void AlternarMenuUsuario() => _menuUsuarioAbierto = !_menuUsuarioAbierto;
+
+    private void CerrarMenuUsuario() => _menuUsuarioAbierto = false;
+
+    private Task CerrarSesion()
+    {
+        _menuUsuarioAbierto = false;
+        return TokenProvider.CerrarSesionAsync();
+    }
+
+    // El evento puede dispararse desde fuera del contexto de sincronización
+    // del renderizador (p. ej. al detectar un 401 dentro de una llamada a la
+    // Api), así que la navegación se despacha con InvokeAsync.
+    private void AlCambiarSesion()
+    {
+        if (TokenProvider.HaySesionValida)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() => Navigation.NavigateTo("/login"));
+    }
+
+    public void Dispose() => TokenProvider.CambioSesion -= AlCambiarSesion;
+}
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

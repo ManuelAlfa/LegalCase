@@ -1,0 +1,38 @@
+@* Página de error de producción (en desarrollo se muestra la página de
+   excepción detallada de ASP.NET Core, ver Program.cs). Deliberadamente no
+   muestra el detalle de la excepción: puede contener datos del expediente
+   o de la conexión. *@
+@page "/Error"
+@using System.Diagnostics
+@layout LoginLayout
+
+<PageTitle>Error — Compás</PageTitle>
+
+<div style="max-width:560px;margin:80px auto;padding:0 24px">
+    <div class="cps-card">
+        <h3>Se ha producido un error</h3>
+        <p class="cps-vacio">
+            No se ha podido completar la operación. Vuelve a intentarlo y, si el problema
+            persiste, avisa indicando el identificador de abajo.
+        </p>
+        @if (MostrarIdPeticion)
+        {
+            <p class="cps-vacio" style="margin-top:10px">
+                Identificador de la petición: <code class="tabular">@IdPeticion</code>
+            </p>
+        }
+        <p style="margin-top:16px">
+            <a class="cps-btn cps-btn-outlined" href="/">Volver al panel principal</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string? IdPeticion { get; set; }
+    private bool MostrarIdPeticion => !string.IsNullOrEmpty(IdPeticion);
+
+    protected override void OnInitialized() =>
+        IdPeticion = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}
