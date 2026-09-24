@@ -33,10 +33,13 @@ else
             <span class="mark"><svg class="icon" style="width:16px;height:16px;color:#fff"><use href="#i-compass" /></svg></span>
             Compás
         </a>
-        <label class="cps-searchfield">
-            <svg class="icon" style="width:16px;height:16px"><use href="#i-search" /></svg>
-            <input type="text" placeholder="Buscar expedientes, documentos, clientes…" disabled title="Búsqueda: tarea 6.6, todavía no implementada" />
-        </label>
+        @* Aviso, no un campo: la búsqueda global es la tarea 6.6 y todavía
+           no existe. Se mantiene el hueco que ocupará en la barra (como en
+           el mockup) pero sin lupa ni caja de texto, porque con ese aspecto
+           se confundía con el filtro de la tabla, que sí funciona. *@
+        <span class="cps-busqueda-pendiente">
+            Búsqueda global — en construcción
+        </span>
         <span class="appbar-spacer"></span>
         @* Sin punto rojo de aviso (a diferencia del mockup): no hay todavía
            un origen real de notificaciones que contar — mostrar un aviso

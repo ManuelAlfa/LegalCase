@@ -275,6 +275,30 @@ body { font-family: var(--font-body); color: var(--mud-text-primary); -webkit-fo
 /* Mensaje de "no hay nada que mostrar" dentro de una tarjeta. */
 .cps-vacio { margin: 0; font-size: 13px; color: var(--mud-text-secondary); }
 
+/* Campo de búsqueda/filtro que SÍ funciona: lupa dentro, fondo sólido y
+   borde nítido. Es la señal visual de "aquí se escribe y se busca". */
+.cps-campo-busqueda {
+  display: flex; align-items: center; gap: 8px; width: 300px; max-width: 100%;
+  background: #fff; border: 1px solid rgba(0,0,0,.23); border-radius: 8px;
+  padding: 8px 12px; color: var(--mud-text-secondary);
+}
+.cps-campo-busqueda:focus-within { border-color: var(--mud-primary); border-width: 2px; padding: 7px 11px; }
+.cps-campo-busqueda input {
+  border: none; background: transparent; outline: none; font: inherit; font-size: 13.5px;
+  flex: 1; min-width: 0; color: var(--mud-text-primary);
+}
+
+/* Contrapartida: el hueco de la búsqueda global, que todavía no existe
+   (tarea 6.6). Sin lupa, sin caja, sin fondo y con borde discontinuo — no
+   debe poder confundirse con un campo operativo. */
+.cps-busqueda-pendiente {
+  flex: 1; max-width: 420px; padding: 7px 14px; border: 1px dashed rgba(0,0,0,.18);
+  border-radius: 20px; background: transparent; color: var(--mud-text-disabled);
+  font-size: 12.5px; font-style: italic; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; user-select: none;
+}
+@media (max-width: 860px) { .cps-busqueda-pendiente { display: none; } }
+
 /* Menú desplegable del usuario en la barra superior (Razor+CSS propio). */
 .cps-menu-usuario { position: relative; flex: none; }
 .cps-chev-menu { transition: transform .15s ease; }

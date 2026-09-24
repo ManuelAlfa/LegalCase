@@ -11,11 +11,13 @@
             @Titulo
             <span class="cps-count">mostrando @Filtrados.Count de @Expedientes.Count</span>
         </h3>
-        <div class="cps-field" style="width:280px">
-            <input class="cps-input" type="search" placeholder="Filtrar por número, cliente o materia…"
+        @* La lupa va aquí, en el campo que de verdad busca. *@
+        <label class="cps-campo-busqueda">
+            <svg class="icon" style="width:16px;height:16px" aria-hidden="true"><use href="#i-search" /></svg>
+            <input type="search" placeholder="Filtrar por número, cliente o materia…"
                    aria-label="Filtrar expedientes"
                    value="@_filtro" @oninput="AlEscribirFiltro" />
-        </div>
+        </label>
     </div>
 
     @if (Expedientes.Count == 0)
