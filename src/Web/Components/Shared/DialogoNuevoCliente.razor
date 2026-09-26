@@ -1,0 +1,167 @@
+@* Alta de cliente. Se usa desde dos sitios: la pantalla de Clientes y el
+   enlace "+ nuevo cliente" del alta de expediente, para no obligar a salir
+   del alta a medias cuando el caso es de un cliente que aún no existe.
+
+   Las acciones de RGPD (exportar, rectificar, solicitar supresión) NO van
+   aquí: son la tarea 6.8 del plan, operan sobre un cliente que ya existe y
+   viven en su ficha. Mezclar "solicitar supresión" en la misma pantalla
+   donde se da de alta es pedir un accidente. *@
+@using LegalCaseManagement.Domain.Entities
+@using Web.Services
+@inject ClientesApiClient ClientesApiClient
+
+<div class="cps-modal-fondo @(Anidado ? "cps-modal-anidado" : "")" @onclick="Cerrar"></div>
+<div class="cps-modal @(Anidado ? "cps-modal-anidado" : "")" role="dialog" aria-modal="true"
+     aria-labelledby="titulo-nuevo-cliente">
+    <div class="cps-modal-cabecera">
+        <div>
+            <p class="cps-modal-seccion">CLIENTES</p>
+            <h2 id="titulo-nuevo-cliente">Nuevo cliente</h2>
+        </div>
+        <button type="button" class="cps-iconbtn" aria-label="Cerrar"
+                @onclick="Cerrar" disabled="@_guardando">
+            <svg class="icon" style="width:18px;height:18px"><use href="#i-x" /></svg>
+        </button>
+    </div>
+
+    <div class="cps-modal-cuerpo">
+        @if (_errorGeneral is not null)
+        {
+            <div class="cps-alert-error" role="alert">
+                <svg class="icon" style="width:16px;height:16px"><use href="#i-x" /></svg>
+                @_errorGeneral
+            </div>
+        }
+
+        <div class="cps-field">
+            <label for="nc-nombre">Nombre o razón social</label>
+            <input id="nc-nombre" class="cps-input" @bind="_nombre" @bind:event="oninput"
+                   placeholder="P. ej. Comunidad de Propietarios Ronda Sur 12" />
+            @foreach (var mensaje in ErroresDe("nombre"))
+            {
+                <span class="validation-message">@mensaje</span>
+            }
+        </div>
+
+        <div class="cps-modal-fila">
+            <div class="cps-field">
+                <label for="nc-dni">DNI / CIF <span class="cps-opcional">(opcional)</span></label>
+                <input id="nc-dni" class="cps-input" @bind="_dniCif" placeholder="12345678Z" />
+                @foreach (var mensaje in ErroresDe("dniCif"))
+                {
+                    <span class="validation-message">@mensaje</span>
+                }
+            </div>
+
+            <div class="cps-field">
+                <label for="nc-canal">Canal preferido</label>
+                <select id="nc-canal" @bind="_canalPreferido">
+                    @foreach (var canal in Canales)
+                    {
+                        <option value="@canal">@canal</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="cps-modal-fila">
+            <div class="cps-field">
+                <label for="nc-email">Correo <span class="cps-opcional">(opcional)</span></label>
+                <input id="nc-email" class="cps-input" type="email" @bind="_email"
+                       placeholder="cliente@correo.es" />
+                @foreach (var mensaje in ErroresDe("email"))
+                {
+                    <span class="validation-message">@mensaje</span>
+                }
+            </div>
+
+            <div class="cps-field">
+                <label for="nc-telefono">Teléfono <span class="cps-opcional">(opcional)</span></label>
+                <input id="nc-telefono" class="cps-input" @bind="_telefono" placeholder="600123456" />
+            </div>
+        </div>
+
+        @* Aviso deliberado: quien da de alta un cliente está registrando
+           datos personales, y el despacho tiene que poder justificar por qué
+           los tiene. No es decoración legal, es el principio de
+           responsabilidad proactiva del RGPD. *@
+        <p class="cps-ayuda">
+            Estos son datos personales del interesado. El despacho debe poder acreditar la base
+            legal por la que los trata y atender sus derechos de acceso, rectificación y supresión.
+        </p>
+    </div>
+
+    <div class="cps-modal-pie">
+        <button type="button" class="cps-btn cps-btn-text" @onclick="Cerrar" disabled="@_guardando">
+            Cancelar
+        </button>
+        <button type="button" class="cps-btn cps-btn-filled" @onclick="Guardar" disabled="@_guardando">
+            @(_guardando ? "Guardando…" : "Crear cliente")
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<Cliente> OnCreado { get; set; }
+    [Parameter] public EventCallback OnCancelar { get; set; }
+
+    /// <summary>Se abre encima de otro diálogo (el de alta de expediente).</summary>
+    [Parameter] public bool Anidado { get; set; }
+
+    // Los mismos tres canales que ya usan los clientes existentes. En el
+    // modelo es texto libre, no un enum: se deja así a propósito para que un
+    // despacho pueda añadir el suyo sin migración, pero la interfaz ofrece
+    // los habituales en vez de un campo abierto donde cada uno escriba una
+    // variante distinta de "email".
+    private static readonly string[] Canales = ["Email", "Teléfono", "WhatsApp"];
+
+    private bool _guardando;
+    private string? _errorGeneral;
+    private IReadOnlyDictionary<string, string[]> _errores = new Dictionary<string, string[]>();
+
+    private string _nombre = string.Empty;
+    private string _dniCif = string.Empty;
+    private string _email = string.Empty;
+    private string _telefono = string.Empty;
+    private string _canalPreferido = "Email";
+
+    private IEnumerable<string> ErroresDe(string campo) =>
+        _errores.TryGetValue(campo, out var mensajes) ? mensajes : [];
+
+    private async Task Guardar()
+    {
+        _guardando = true;
+        _errorGeneral = null;
+        _errores = new Dictionary<string, string[]>();
+
+        try
+        {
+            var resultado = await ClientesApiClient.CrearAsync(new NuevoCliente(
+                Nombre: _nombre,
+                DniCif: _dniCif,
+                Email: _email,
+                Telefono: _telefono,
+                CanalPreferido: _canalPreferido));
+
+            if (resultado.EsCorrecto)
+            {
+                await OnCreado.InvokeAsync(resultado.Valor!);
+                return;
+            }
+
+            _errores = resultado.ErroresPorCampo;
+            _errorGeneral = resultado.ErrorGeneral
+                ?? (_errores.Count == 0 ? "No se pudo crear el cliente." : null);
+        }
+        catch (HttpRequestException)
+        {
+            _errorGeneral = "No se pudo contactar con la Api. El cliente no se ha creado.";
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private Task Cerrar() => _guardando ? Task.CompletedTask : OnCancelar.InvokeAsync();
+}

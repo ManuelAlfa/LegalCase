@@ -1,6 +1,12 @@
-@* Listado de clientes (ruta base de la tarea 6.2). Alta y edición de
-   clientes pertenecen a una tarea posterior: aquí solo se listan los datos
-   reales que ya existen. *@
+@* Clientes del despacho: listado y alta.
+
+   El menú del mockup traía una sola entrada "Clientes y RGPD". Aquí van
+   separadas a propósito: esta pantalla es trabajo diario (consultar y dar
+   de alta), mientras que las acciones de RGPD —exportar los datos de un
+   interesado, rectificarlos, solicitar su supresión— son excepcionales,
+   se ejercen sobre un cliente concreto y están restringidas por rol. Son la
+   tarea 6.8 del plan y necesitan antes los endpoints de la tarea C.1, que
+   todavía no existen. *@
 @page "/clientes"
 @using LegalCaseManagement.Domain.Entities
 @inject ClientesApiClient ClientesApiClient
@@ -30,6 +36,10 @@ else
                 Clientes del despacho
                 <span class="cps-count">@_clientes.Count en total</span>
             </h3>
+            <button type="button" class="cps-btn cps-btn-filled cps-btn-sm" @onclick="AbrirDialogoNuevo">
+                <svg class="icon" aria-hidden="true"><use href="#i-users" /></svg>
+                Nuevo cliente
+            </button>
         </div>
 
         @if (_clientes.Count == 0)
@@ -67,10 +77,16 @@ else
     </div>
 }
 
+@if (_dialogoAbierto)
+{
+    <DialogoNuevoCliente OnCreado="AlCrearCliente" OnCancelar="CerrarDialogo" />
+}
+
 @code {
     private bool _cargando = true;
     private string? _error;
     private List<Cliente> _clientes = [];
+    private bool _dialogoAbierto;
 
     protected override async Task OnInitializedAsync()
     {
@@ -86,5 +102,18 @@ else
         {
             _cargando = false;
         }
+    }
+
+    private void AbrirDialogoNuevo() => _dialogoAbierto = true;
+
+    private void CerrarDialogo() => _dialogoAbierto = false;
+
+    // Se inserta manteniendo el orden alfabético del listado, en vez de
+    // recargarlo entero: la Api ya ha devuelto el cliente completo.
+    private void AlCrearCliente(Cliente creado)
+    {
+        _dialogoAbierto = false;
+        _clientes.Add(creado);
+        _clientes = [.. _clientes.OrderBy(c => c.Nombre)];
     }
 }

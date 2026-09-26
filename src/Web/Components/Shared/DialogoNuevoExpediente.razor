@@ -73,6 +73,12 @@
                     {
                         <span class="validation-message">@mensaje</span>
                     }
+                    @* Un caso nuevo es muy a menudo de un cliente nuevo.
+                       Obligar a salir del alta, ir a Clientes y volver a
+                       empezar sería perder lo ya escrito. *@
+                    <button type="button" class="cps-enlace-alta" @onclick="AbrirAltaCliente">
+                        + nuevo cliente
+                    </button>
                 </div>
 
                 <div class="cps-field">
@@ -136,6 +142,13 @@
     </div>
 </div>
 
+@if (_altaClienteAbierta)
+{
+    <DialogoNuevoCliente Anidado="true"
+                         OnCreado="AlCrearCliente"
+                         OnCancelar="@(() => _altaClienteAbierta = false)" />
+}
+
 @code {
     /// <summary>Se invoca con el expediente ya creado, para que la pantalla se refresque.</summary>
     [Parameter] public EventCallback<Expediente> OnCreado { get; set; }
@@ -155,6 +168,7 @@
 
     private bool _cargando = true;
     private bool _guardando;
+    private bool _altaClienteAbierta;
     private string? _errorGeneral;
     private IReadOnlyDictionary<string, string[]> _errores = new Dictionary<string, string[]>();
 
@@ -197,6 +211,19 @@
         {
             _cargando = false;
         }
+    }
+
+    private void AbrirAltaCliente() => _altaClienteAbierta = true;
+
+    // El cliente recién creado se añade a la lista y queda ya seleccionado:
+    // es lo que venía a hacer quien pulsó el enlace, y así no tiene que
+    // buscarlo en el desplegable después.
+    private void AlCrearCliente(Cliente creado)
+    {
+        _altaClienteAbierta = false;
+        _clientes.Add(creado);
+        _clientes = [.. _clientes.OrderBy(c => c.Nombre)];
+        _clienteId = creado.Id.ToString();
     }
 
     private IEnumerable<string> ErroresDe(string campo) =>

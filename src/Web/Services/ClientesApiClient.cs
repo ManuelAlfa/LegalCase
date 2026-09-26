@@ -8,4 +8,14 @@ public class ClientesApiClient(HttpClient http, TokenProvider tokenProvider)
 {
     public Task<List<Cliente>> ListarAsync(CancellationToken ct = default) =>
         ObtenerListaAsync<Cliente>("/api/clientes", ct);
+
+    public Task<ResultadoApi<Cliente>> CrearAsync(NuevoCliente datos, CancellationToken ct = default) =>
+        CrearAsync<Cliente>("/api/clientes", datos, ct);
 }
+
+public record NuevoCliente(
+    string Nombre,
+    string DniCif,
+    string Email,
+    string Telefono,
+    string CanalPreferido);

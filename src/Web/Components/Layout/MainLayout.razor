@@ -80,6 +80,18 @@ else
         <EnlaceNav Ruta="/" Icono="i-home" Texto="Panel principal" />
         <div class="cps-navgroup-label">Expedientes</div>
         <EnlaceNav Ruta="/expedientes" Icono="i-folder" Texto="Expedientes" />
+        @* El mockup traía una sola entrada, "Clientes y RGPD". Va separada a
+           propósito (decidido con Manuel el 2026-09-26): son dos cosas con
+           frecuencia, audiencia y riesgo distintos. "Clientes" es trabajo
+           diario —consultar y dar de alta—; las acciones de RGPD (exportar
+           los datos de un interesado, rectificarlos, solicitar su supresión)
+           son excepcionales, están restringidas por rol y conviene que
+           cuesten un clic de más, no que compartan pantalla con el alta.
+           La segunda entrada se añadirá cuando tenga pantalla que abrir:
+           es la tarea 6.8, y necesita antes los endpoints de la tarea C.1
+           (exportar y solicitar-supresión, que aún no existen) y la tabla de
+           plazos de retención de la C.2. Igual que con Auditoría, aquí no se
+           enseña lo que todavía no lleva a ningún sitio. *@
         <EnlaceNav Ruta="/clientes" Icono="i-users" Texto="Clientes" />
         @* Auditoría (tarea 6.2) oculta a propósito: el criterio de terminado
            pide que solo la vea el rol Administrador, pero ese rol no existe
