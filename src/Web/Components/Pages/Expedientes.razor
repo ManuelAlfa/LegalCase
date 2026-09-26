@@ -5,6 +5,7 @@
 @using LegalCaseManagement.Domain.Entities
 @inject ExpedientesApiClient ExpedientesApiClient
 @inject MateriasApiClient MateriasApiClient
+@inject UsuariosApiClient UsuariosApiClient
 @inject NavigationManager Navigation
 
 <PageTitle>Expedientes — Compás</PageTitle>
@@ -29,7 +30,14 @@ else
     <TablaExpedientes Titulo="Todos los expedientes"
                       Expedientes="_expedientes"
                       MateriasPorId="_materiasPorId"
-                      OnSeleccionar="AbrirExpediente" />
+                      AbogadosPorId="_abogadosPorId"
+                      OnSeleccionar="AbrirExpediente"
+                      OnNuevo="AbrirDialogoNuevo" />
+}
+
+@if (_dialogoAbierto)
+{
+    <DialogoNuevoExpediente OnCreado="AlCrearExpediente" OnCancelar="CerrarDialogo" />
 }
 
 @code {
@@ -37,6 +45,8 @@ else
     private string? _error;
     private List<Expediente> _expedientes = [];
     private Dictionary<Guid, Materia> _materiasPorId = [];
+    private Dictionary<Guid, UsuarioResumen> _abogadosPorId = [];
+    private bool _dialogoAbierto;
 
     protected override async Task OnInitializedAsync()
     {
@@ -44,10 +54,12 @@ else
         {
             var expedientesTask = ExpedientesApiClient.ListarAsync();
             var materiasTask = MateriasApiClient.ListarAsync();
-            await Task.WhenAll(expedientesTask, materiasTask);
+            var usuariosTask = UsuariosApiClient.ListarAsync();
+            await Task.WhenAll(expedientesTask, materiasTask, usuariosTask);
 
             _expedientes = await expedientesTask;
             _materiasPorId = (await materiasTask).ToDictionary(m => m.Id);
+            _abogadosPorId = (await usuariosTask).ToDictionary(u => u.Id);
         }
         catch (HttpRequestException)
         {
@@ -60,4 +72,18 @@ else
     }
 
     private void AbrirExpediente(Guid id) => Navigation.NavigateTo($"/expedientes/{id}");
+
+    private void AbrirDialogoNuevo() => _dialogoAbierto = true;
+
+    private void CerrarDialogo() => _dialogoAbierto = false;
+
+    // El expediente creado se añade a la lista en memoria en vez de recargar
+    // todo: la Api ya lo ha devuelto completo, así que volver a pedir el
+    // listado entero sería una llamada de más. Se coloca el primero porque
+    // el listado va ordenado por fecha de apertura descendente.
+    private void AlCrearExpediente(Expediente creado)
+    {
+        _dialogoAbierto = false;
+        _expedientes.Insert(0, creado);
+    }
 }

@@ -1,0 +1,249 @@
+@* Alta de expediente desde la interfaz.
+
+   Diálogo propio en Razor+CSS, no MudDialog, por coherencia con el resto
+   del chrome de la aplicación (ver MainLayout.razor: el popover de
+   MudBlazor no llegaba a abrirse en estas pantallas, y el alta de un
+   expediente no puede depender de eso).
+
+   El número de expediente se muestra solo como aviso: lo asigna el servidor
+   al guardar, con el contador correlativo del despacho. Si lo eligiera el
+   navegador, dos altas simultáneas podrían proponer el mismo número. *@
+@using LegalCaseManagement.Domain.Entities
+@using Web.Services
+@inject ExpedientesApiClient ExpedientesApiClient
+@inject ClientesApiClient ClientesApiClient
+@inject MateriasApiClient MateriasApiClient
+@inject UsuariosApiClient UsuariosApiClient
+
+<div class="cps-modal-fondo" @onclick="CerrarSiNoEstaGuardando"></div>
+<div class="cps-modal" role="dialog" aria-modal="true" aria-labelledby="titulo-nuevo-expediente">
+    <div class="cps-modal-cabecera">
+        <div>
+            <p class="cps-modal-seccion">EXPEDIENTES</p>
+            <h2 id="titulo-nuevo-expediente">Nuevo expediente</h2>
+        </div>
+        <button type="button" class="cps-iconbtn" aria-label="Cerrar"
+                @onclick="Cerrar" disabled="@_guardando">
+            <svg class="icon" style="width:18px;height:18px"><use href="#i-x" /></svg>
+        </button>
+    </div>
+
+    <div class="cps-modal-cuerpo">
+        @if (_cargando)
+        {
+            <p class="cps-vacio">Cargando datos del despacho…</p>
+        }
+        else
+        {
+            @if (_errorGeneral is not null)
+            {
+                <div class="cps-alert-error" role="alert">
+                    <svg class="icon" style="width:16px;height:16px"><use href="#i-x" /></svg>
+                    @_errorGeneral
+                </div>
+            }
+
+            <div class="cps-field">
+                <label for="ne-numero">Número de expediente</label>
+                <input id="ne-numero" class="cps-input" value="@_numeroPrevisto" disabled />
+                <span class="cps-ayuda">Se asigna automáticamente al guardar — correlativo del despacho.</span>
+            </div>
+
+            <div class="cps-field">
+                <label for="ne-asunto">Asunto</label>
+                <input id="ne-asunto" class="cps-input" @bind="_titulo" @bind:event="oninput"
+                       placeholder="P. ej. Despido improcedente" />
+                @foreach (var mensaje in ErroresDe("titulo"))
+                {
+                    <span class="validation-message">@mensaje</span>
+                }
+            </div>
+
+            <div class="cps-modal-fila">
+                <div class="cps-field">
+                    <label for="ne-cliente">Cliente</label>
+                    <select id="ne-cliente" @bind="_clienteId">
+                        <option value="">— Selecciona un cliente —</option>
+                        @foreach (var cliente in _clientes)
+                        {
+                            <option value="@cliente.Id">@cliente.Nombre</option>
+                        }
+                    </select>
+                    @foreach (var mensaje in ErroresDe("clienteId"))
+                    {
+                        <span class="validation-message">@mensaje</span>
+                    }
+                </div>
+
+                <div class="cps-field">
+                    <label for="ne-materia">Materia</label>
+                    <select id="ne-materia" @bind="_materiaId">
+                        <option value="">— Sin materia —</option>
+                        @foreach (var materia in _materias)
+                        {
+                            <option value="@materia.Id">@materia.Nombre</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="cps-modal-fila">
+                <div class="cps-field">
+                    <label for="ne-contraria">Parte contraria <span class="cps-opcional">(opcional)</span></label>
+                    <input id="ne-contraria" class="cps-input" @bind="_parteContraria"
+                           placeholder="Nombre de la parte contraria" />
+                </div>
+
+                <div class="cps-field">
+                    <label for="ne-abogado">Abogado responsable</label>
+                    <select id="ne-abogado" @bind="_abogadoId">
+                        <option value="">— Sin asignar —</option>
+                        @foreach (var abogado in _abogados)
+                        {
+                            <option value="@abogado.Id">@abogado.Nombre</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="cps-modal-fila">
+                <div class="cps-field">
+                    <label for="ne-fecha">Fecha de apertura</label>
+                    <input id="ne-fecha" class="cps-input" type="date" @bind="_fechaApertura" />
+                </div>
+
+                <div class="cps-field">
+                    <label for="ne-estado">Estado inicial</label>
+                    <select id="ne-estado" @bind="_estado">
+                        @foreach (var estado in EstadosIniciales)
+                        {
+                            <option value="@estado">@Presentacion.TextoEstado(estado)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="cps-modal-pie">
+        <button type="button" class="cps-btn cps-btn-text" @onclick="Cerrar" disabled="@_guardando">
+            Cancelar
+        </button>
+        <button type="button" class="cps-btn cps-btn-filled" @onclick="Guardar"
+                disabled="@(_guardando || _cargando)">
+            @(_guardando ? "Guardando…" : "Crear expediente")
+        </button>
+    </div>
+</div>
+
+@code {
+    /// <summary>Se invoca con el expediente ya creado, para que la pantalla se refresque.</summary>
+    [Parameter] public EventCallback<Expediente> OnCreado { get; set; }
+
+    [Parameter] public EventCallback OnCancelar { get; set; }
+
+    // Solo los estados con los que tiene sentido ABRIR un expediente.
+    // "Cerrado" y "Archivado" existen en el dominio pero son estados de
+    // final de vida: ofrecerlos aquí permitiría dar de alta un expediente
+    // ya cerrado, que no significa nada.
+    private static readonly EstadoExpediente[] EstadosIniciales =
+    [
+        EstadoExpediente.Abierto,
+        EstadoExpediente.EnTramite,
+        EstadoExpediente.PendienteDocumentacion
+    ];
+
+    private bool _cargando = true;
+    private bool _guardando;
+    private string? _errorGeneral;
+    private IReadOnlyDictionary<string, string[]> _errores = new Dictionary<string, string[]>();
+
+    private List<Cliente> _clientes = [];
+    private List<Materia> _materias = [];
+    private List<UsuarioResumen> _abogados = [];
+
+    private string _numeroPrevisto = "Se asignará al guardar";
+    private string _titulo = string.Empty;
+    private string _clienteId = string.Empty;
+    private string _materiaId = string.Empty;
+    private string _abogadoId = string.Empty;
+    private string _parteContraria = string.Empty;
+    private DateTime _fechaApertura = DateTime.UtcNow.Date;
+    private EstadoExpediente _estado = EstadoExpediente.Abierto;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var clientesTask = ClientesApiClient.ListarAsync();
+            var materiasTask = MateriasApiClient.ListarAsync();
+            var usuariosTask = UsuariosApiClient.ListarAsync();
+            await Task.WhenAll(clientesTask, materiasTask, usuariosTask);
+
+            _clientes = [.. (await clientesTask).OrderBy(c => c.Nombre)];
+            _materias = [.. (await materiasTask).OrderBy(m => m.Nombre)];
+
+            // Solo quien puede llevar un expediente: el personal
+            // administrativo no aparece como responsable.
+            _abogados = [.. (await usuariosTask)
+                .Where(u => u.Rol is RolUsuario.Socio or RolUsuario.Abogado or RolUsuario.ProcuradorGraduadoSocial)
+                .OrderBy(u => u.Nombre)];
+        }
+        catch (HttpRequestException)
+        {
+            _errorGeneral = "No se pudieron cargar los datos del despacho. Comprueba que la Api esté en marcha.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private IEnumerable<string> ErroresDe(string campo) =>
+        _errores.TryGetValue(campo, out var mensajes) ? mensajes : [];
+
+    private async Task Guardar()
+    {
+        _guardando = true;
+        _errorGeneral = null;
+        _errores = new Dictionary<string, string[]>();
+
+        try
+        {
+            var datos = new NuevoExpediente(
+                Titulo: _titulo,
+                ClienteId: Guid.TryParse(_clienteId, out var clienteId) ? clienteId : Guid.Empty,
+                MateriaId: Guid.TryParse(_materiaId, out var materiaId) ? materiaId : null,
+                AbogadoResponsableId: Guid.TryParse(_abogadoId, out var abogadoId) ? abogadoId : null,
+                ParteContraria: string.IsNullOrWhiteSpace(_parteContraria) ? null : _parteContraria,
+                FechaApertura: _fechaApertura,
+                Estado: _estado);
+
+            var resultado = await ExpedientesApiClient.CrearAsync(datos);
+
+            if (resultado.EsCorrecto)
+            {
+                await OnCreado.InvokeAsync(resultado.Valor!);
+                return;
+            }
+
+            _errores = resultado.ErroresPorCampo;
+            _errorGeneral = resultado.ErrorGeneral
+                ?? (_errores.Count == 0 ? "No se pudo crear el expediente." : null);
+        }
+        catch (HttpRequestException)
+        {
+            _errorGeneral = "No se pudo contactar con la Api. El expediente no se ha creado.";
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private Task Cerrar() => _guardando ? Task.CompletedTask : OnCancelar.InvokeAsync();
+
+    // Pulsar fuera del diálogo cierra, salvo mientras se guarda: perder el
+    // formulario por un clic accidental justo entonces sería lo peor posible.
+    private Task CerrarSiNoEstaGuardando() => Cerrar();
+}

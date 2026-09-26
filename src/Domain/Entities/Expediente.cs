@@ -5,13 +5,28 @@ public enum EstadoExpediente
     Abierto,
     EnTramite,
     Cerrado,
-    Archivado
+    Archivado,
+
+    // Añadido al final a propósito: el valor se persiste como entero, así que
+    // insertarlo en medio renumeraría los existentes y cambiaría el estado de
+    // todos los expedientes ya guardados. Un despacho lo usa de verdad para
+    // el expediente que ya está abierto pero espera documentación del
+    // cliente, distinto de "en trámite" (donde ya hay actuación procesal).
+    PendienteDocumentacion
 }
 
 public class Expediente : ITenantEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid TenantId { get; set; }
+
+    // Número visible del expediente, correlativo por despacho y año
+    // ("2026/0152"). Lo asigna el servidor al dar de alta, nunca el cliente,
+    // y es único dentro del despacho (índice único sobre TenantId+Numero).
+    // Antes vivía incrustado dentro de Titulo, donde no se podía garantizar
+    // ni unicidad ni correlatividad, ni mostrarlo en su propia columna.
+    public string Numero { get; set; } = string.Empty;
+
     public string Titulo { get; set; } = string.Empty;
     public string Cliente { get; set; } = string.Empty;
     public EstadoExpediente Estado { get; set; } = EstadoExpediente.Abierto;
@@ -25,6 +40,10 @@ public class Expediente : ITenantEntity
     // no solo el nombre escrito a mano en `Cliente`.
     public Guid? ClienteId { get; set; }
     public Guid? MateriaId { get; set; }
+
+    // Abogado del despacho que lleva el expediente. Opcional: un expediente
+    // recién abierto puede estar todavía sin asignar.
+    public Guid? AbogadoResponsableId { get; set; }
 
     // Contador atómico para asignar rangos de folio (Bates) a los
     // DocumentoAdjunto del expediente sin colisiones entre documentos

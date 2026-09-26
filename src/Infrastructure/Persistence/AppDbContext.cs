@@ -47,6 +47,16 @@ public class AppDbContext : DbContext
             b.HasIndex(e => e.TenantId);
             b.HasIndex(e => e.ClienteId);
             b.HasIndex(e => e.MateriaId);
+            b.HasIndex(e => e.AbogadoResponsableId);
+
+            // Único DENTRO del despacho, no globalmente: dos despachos
+            // distintos pueden tener cada uno su expediente 2026/0001. Es
+            // además la red de seguridad de la numeración correlativa: si dos
+            // altas simultáneas llegaran a calcular el mismo número, la
+            // segunda falla en la base de datos en vez de duplicarlo en
+            // silencio.
+            b.HasIndex(e => new { e.TenantId, e.Numero }).IsUnique();
+            b.Property(e => e.Numero).HasMaxLength(32);
 
             // Filtro global: toda consulta a Expedientes queda automáticamente
             // acotada al tenant actual. Es una red de seguridad a nivel de

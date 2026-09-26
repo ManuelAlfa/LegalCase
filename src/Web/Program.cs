@@ -28,6 +28,7 @@ builder.Services.AddHttpClient<ExpedientesApiClient>(c => c.BaseAddress = new Ur
 builder.Services.AddHttpClient<PlazosApiClient>(c => c.BaseAddress = new Uri(apiBaseUrl));
 builder.Services.AddHttpClient<MateriasApiClient>(c => c.BaseAddress = new Uri(apiBaseUrl));
 builder.Services.AddHttpClient<ClientesApiClient>(c => c.BaseAddress = new Uri(apiBaseUrl));
+builder.Services.AddHttpClient<UsuariosApiClient>(c => c.BaseAddress = new Uri(apiBaseUrl));
 
 var app = builder.Build();
 

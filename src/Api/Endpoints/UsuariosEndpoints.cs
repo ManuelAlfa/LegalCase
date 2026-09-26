@@ -10,15 +10,15 @@ public static class UsuariosEndpoints
     {
         app.MapGet("/api/usuarios", async (AppDbContext db) =>
                 await db.Usuarios
-                    .OrderBy(u => u.Email)
-                    .Select(u => new UsuarioResponse(u.Id, u.Email, u.Rol))
+                    .OrderBy(u => u.Nombre)
+                    .Select(u => new UsuarioResponse(u.Id, u.Nombre, u.Email, u.Rol))
                     .ToListAsync())
             .RequireAuthorization();
 
         app.MapGet("/api/usuarios/{id:guid}", async (Guid id, AppDbContext db) =>
                 await db.Usuarios
                     .Where(u => u.Id == id)
-                    .Select(u => new UsuarioResponse(u.Id, u.Email, u.Rol))
+                    .Select(u => new UsuarioResponse(u.Id, u.Nombre, u.Email, u.Rol))
                     .FirstOrDefaultAsync() is { } usuario
                     ? Results.Ok(usuario)
                     : Results.NotFound())
@@ -33,6 +33,7 @@ public static class UsuariosEndpoints
                 var usuario = new Usuario
                 {
                     TenantId = tenant.TenantId,
+                    Nombre = request.Nombre,
                     Email = request.Email,
                     PasswordHash = request.PasswordHash,
                     Rol = request.Rol
@@ -41,7 +42,7 @@ public static class UsuariosEndpoints
                 db.Usuarios.Add(usuario);
                 await db.SaveChangesAsync();
 
-                var response = new UsuarioResponse(usuario.Id, usuario.Email, usuario.Rol);
+                var response = new UsuarioResponse(usuario.Id, usuario.Nombre, usuario.Email, usuario.Rol);
                 return Results.Created($"/api/usuarios/{usuario.Id}", response);
             })
             .RequireAuthorization();
@@ -52,13 +53,14 @@ public static class UsuariosEndpoints
                 if (usuario is null)
                     return Results.NotFound();
 
+                if (request.Nombre is not null) usuario.Nombre = request.Nombre;
                 if (request.Email is not null) usuario.Email = request.Email;
                 if (request.PasswordHash is not null) usuario.PasswordHash = request.PasswordHash;
                 if (request.Rol is not null) usuario.Rol = request.Rol.Value;
 
                 await db.SaveChangesAsync();
 
-                return Results.Ok(new UsuarioResponse(usuario.Id, usuario.Email, usuario.Rol));
+                return Results.Ok(new UsuarioResponse(usuario.Id, usuario.Nombre, usuario.Email, usuario.Rol));
             })
             .RequireAuthorization();
 
@@ -66,10 +68,10 @@ public static class UsuariosEndpoints
     }
 }
 
-public record UsuarioCreateRequest(string Email, string PasswordHash, RolUsuario Rol);
+public record UsuarioCreateRequest(string Nombre, string Email, string PasswordHash, RolUsuario Rol);
 
-public record UsuarioUpdateRequest(string? Email, string? PasswordHash, RolUsuario? Rol);
+public record UsuarioUpdateRequest(string? Nombre, string? Email, string? PasswordHash, RolUsuario? Rol);
 
 // Nunca incluye PasswordHash: es lo único que se filtra deliberadamente de
 // la entidad al serializar la respuesta.
-public record UsuarioResponse(Guid Id, string Email, RolUsuario Rol);
+public record UsuarioResponse(Guid Id, string Nombre, string Email, RolUsuario Rol);

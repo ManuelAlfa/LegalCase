@@ -18,6 +18,7 @@ public static class Presentacion
     {
         EstadoExpediente.Abierto => "Activo",
         EstadoExpediente.EnTramite => "En trámite",
+        EstadoExpediente.PendienteDocumentacion => "Pendiente doc.",
         EstadoExpediente.Cerrado => "Cerrado",
         EstadoExpediente.Archivado => "Archivado",
         _ => estado.ToString(),
@@ -27,6 +28,10 @@ public static class Presentacion
     {
         EstadoExpediente.Abierto => "cps-chip-success",
         EstadoExpediente.EnTramite => "cps-chip-info",
+        // Ámbar: está esperando algo del cliente, no es un estado tranquilo
+        // ni uno inactivo — el código de color de la tarea 6.0 reserva el
+        // ámbar justo para "pendiente de algo".
+        EstadoExpediente.PendienteDocumentacion => "cps-chip-warning",
         _ => "cps-chip-default",
     };
 

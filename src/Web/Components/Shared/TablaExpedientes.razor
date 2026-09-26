@@ -4,6 +4,7 @@
    traducido de la sección "Expedientes activos" de
    mockup_pantallas_compas_mudblazor.html. *@
 @using LegalCaseManagement.Domain.Entities
+@using Web.Services
 
 <div class="cps-card">
     <div class="cps-list-toolbar">
@@ -18,6 +19,13 @@
                    aria-label="Filtrar expedientes"
                    value="@_filtro" @oninput="AlEscribirFiltro" />
         </label>
+        @if (OnNuevo.HasDelegate)
+        {
+            <button type="button" class="cps-btn cps-btn-filled cps-btn-sm" @onclick="OnNuevo">
+                <svg class="icon" aria-hidden="true"><use href="#i-folder" /></svg>
+                Nuevo expediente
+            </button>
+        }
     </div>
 
     @if (Expedientes.Count == 0)
@@ -34,9 +42,10 @@
             <table class="cps-table">
                 <thead>
                     <tr>
+                        <th scope="col">Número</th>
                         <th scope="col">Expediente</th>
-                        <th scope="col">Cliente</th>
                         <th scope="col">Materia</th>
+                        <th scope="col">Responsable</th>
                         <th scope="col">Estado</th>
                         <th scope="col"><span class="cps-visualmente-oculto">Abrir</span></th>
                     </tr>
@@ -45,9 +54,13 @@
                     @foreach (var expediente in Filtrados)
                     {
                         <tr class="cps-fila-pulsable" @onclick="() => Abrir(expediente.Id)">
-                            <td>@expediente.Titulo</td>
-                            <td>@expediente.Cliente</td>
+                            <td class="cps-numero-expediente">@expediente.Numero</td>
+                            <td>
+                                <b>@expediente.Cliente</b>
+                                <span class="cps-celda-sub">@expediente.Titulo</span>
+                            </td>
                             <td>@NombreMateria(expediente.MateriaId)</td>
+                            <td>@NombreAbogado(expediente.AbogadoResponsableId)</td>
                             <td>
                                 <span class="cps-chip @Presentacion.ClaseChipEstado(expediente.Estado)">
                                     @Presentacion.TextoEstado(expediente.Estado)
@@ -75,7 +88,14 @@
     [Parameter] public IReadOnlyDictionary<Guid, Materia> MateriasPorId { get; set; } =
         new Dictionary<Guid, Materia>();
 
+    /// <summary>Abogados por Id, para la columna Responsable.</summary>
+    [Parameter] public IReadOnlyDictionary<Guid, UsuarioResumen> AbogadosPorId { get; set; } =
+        new Dictionary<Guid, UsuarioResumen>();
+
     [Parameter] public EventCallback<Guid> OnSeleccionar { get; set; }
+
+    /// <summary>Si se enlaza, aparece el botón "Nuevo expediente" en la barra.</summary>
+    [Parameter] public EventCallback OnNuevo { get; set; }
 
     private string _filtro = string.Empty;
 
@@ -87,9 +107,11 @@
     private bool Coincide(Expediente expediente)
     {
         var texto = _filtro.Trim();
-        return expediente.Titulo.Contains(texto, StringComparison.OrdinalIgnoreCase)
+        return expediente.Numero.Contains(texto, StringComparison.OrdinalIgnoreCase)
+            || expediente.Titulo.Contains(texto, StringComparison.OrdinalIgnoreCase)
             || expediente.Cliente.Contains(texto, StringComparison.OrdinalIgnoreCase)
-            || NombreMateria(expediente.MateriaId).Contains(texto, StringComparison.OrdinalIgnoreCase);
+            || NombreMateria(expediente.MateriaId).Contains(texto, StringComparison.OrdinalIgnoreCase)
+            || NombreAbogado(expediente.AbogadoResponsableId).Contains(texto, StringComparison.OrdinalIgnoreCase);
     }
 
     private void AlEscribirFiltro(ChangeEventArgs e) => _filtro = e.Value?.ToString() ?? string.Empty;
@@ -98,6 +120,11 @@
         materiaId is { } id && MateriasPorId.TryGetValue(id, out var materia)
             ? materia.Nombre
             : "—";
+
+    private string NombreAbogado(Guid? abogadoId) =>
+        abogadoId is { } id && AbogadosPorId.TryGetValue(id, out var abogado)
+            ? abogado.Nombre
+            : "Sin asignar";
 
     private Task Abrir(Guid id) => OnSeleccionar.InvokeAsync(id);
 }

@@ -6,12 +6,13 @@
 @using LegalCaseManagement.Domain.Entities
 @inject ExpedientesApiClient ExpedientesApiClient
 @inject MateriasApiClient MateriasApiClient
+@inject UsuariosApiClient UsuariosApiClient
 
-<PageTitle>@(_expediente?.Titulo ?? "Expediente") — Compás</PageTitle>
+<PageTitle>@(_expediente is null ? "Expediente" : $"{_expediente.Numero} {_expediente.Titulo}") — Compás</PageTitle>
 
 <div class="cps-crumbs">
     <a href="/expedientes">Expedientes</a> ·
-    <span class="current">@(_expediente?.Titulo ?? "…")</span>
+    <span class="current">@(_expediente?.Numero ?? "…")</span>
 </div>
 
 @if (_cargando)
@@ -34,7 +35,10 @@ else if (_expediente is null)
 else
 {
     <div class="cps-pagehead">
-        <h1>@_expediente.Titulo</h1>
+        @* El número va delante del asunto: es como se identifica un
+           expediente en el despacho y ante el juzgado. Vivía incrustado en
+           el título hasta que pasó a tener columna propia. *@
+        <h1><span class="cps-numero-expediente">@_expediente.Numero</span> @_expediente.Titulo</h1>
         <span class="cps-chip @Presentacion.ClaseChipEstado(_expediente.Estado)">
             @Presentacion.TextoEstado(_expediente.Estado)
         </span>
@@ -45,6 +49,7 @@ else
         <dl class="cps-datos">
             <div><dt>Cliente</dt><dd>@_expediente.Cliente</dd></div>
             <div><dt>Materia</dt><dd>@_nombreMateria</dd></div>
+            <div><dt>Abogado responsable</dt><dd>@_nombreAbogado</dd></div>
             <div><dt>Fecha de apertura</dt><dd>@Presentacion.FechaCorta(_expediente.FechaApertura) de @_expediente.FechaApertura.Year</dd></div>
             <div>
                 <dt>Fecha de cierre</dt>
@@ -74,6 +79,7 @@ else
     private string? _error;
     private Expediente? _expediente;
     private string _nombreMateria = "—";
+    private string _nombreAbogado = "Sin asignar";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -86,13 +92,18 @@ else
             // sobre el listado del tenant, que ya viene filtrado por RLS.
             var expedientesTask = ExpedientesApiClient.ListarAsync();
             var materiasTask = MateriasApiClient.ListarAsync();
-            await Task.WhenAll(expedientesTask, materiasTask);
+            var usuariosTask = UsuariosApiClient.ListarAsync();
+            await Task.WhenAll(expedientesTask, materiasTask, usuariosTask);
 
             _expediente = (await expedientesTask).FirstOrDefault(e => e.Id == Id);
 
             _nombreMateria = _expediente?.MateriaId is { } materiaId
                 ? (await materiasTask).FirstOrDefault(m => m.Id == materiaId)?.Nombre ?? "—"
                 : "—";
+
+            _nombreAbogado = _expediente?.AbogadoResponsableId is { } abogadoId
+                ? (await usuariosTask).FirstOrDefault(u => u.Id == abogadoId)?.Nombre ?? "Sin asignar"
+                : "Sin asignar";
         }
         catch (HttpRequestException)
         {

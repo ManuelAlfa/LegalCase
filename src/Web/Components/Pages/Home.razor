@@ -12,6 +12,7 @@
 @inject ExpedientesApiClient ExpedientesApiClient
 @inject PlazosApiClient PlazosApiClient
 @inject MateriasApiClient MateriasApiClient
+@inject UsuariosApiClient UsuariosApiClient
 @inject NavigationManager Navigation
 
 <PageTitle>Panel principal — Compás</PageTitle>
@@ -96,7 +97,14 @@ else
     <TablaExpedientes Titulo="Expedientes activos"
                       Expedientes="_expedientes"
                       MateriasPorId="_materiasPorId"
-                      OnSeleccionar="AbrirExpediente" />
+                      AbogadosPorId="_abogadosPorId"
+                      OnSeleccionar="AbrirExpediente"
+                      OnNuevo="AbrirDialogoNuevo" />
+}
+
+@if (_dialogoAbierto)
+{
+    <DialogoNuevoExpediente OnCreado="AlCrearExpediente" OnCancelar="CerrarDialogo" />
 }
 
 @code {
@@ -107,12 +115,37 @@ else
     private List<Expediente> _expedientes = [];
     private Dictionary<Guid, Expediente> _expedientesPorId = [];
     private Dictionary<Guid, Materia> _materiasPorId = [];
+    private Dictionary<Guid, UsuarioResumen> _abogadosPorId = [];
+    private bool _dialogoAbierto;
 
     private int _expedientesActivos;
 
     // Cuántos plazos caben en el panel: el resto vive en su propia pantalla
     // (todavía no construida), igual que en el mockup.
     private const int PlazosEnPanel = 3;
+
+    // "Pendiente de documentación" cuenta como activo: el expediente está
+    // abierto y el despacho tiene trabajo que hacer con él, solo que a la
+    // espera de papeles. Dejarlo fuera haría que dar de alta un expediente
+    // en ese estado no moviera el contador, que es justo lo contrario de lo
+    // que espera quien acaba de crearlo.
+    private void RecalcularActivos() =>
+        _expedientesActivos = _expedientes.Count(e =>
+            e.Estado is EstadoExpediente.Abierto
+                     or EstadoExpediente.EnTramite
+                     or EstadoExpediente.PendienteDocumentacion);
+
+    private void AbrirDialogoNuevo() => _dialogoAbierto = true;
+
+    private void CerrarDialogo() => _dialogoAbierto = false;
+
+    private void AlCrearExpediente(Expediente creado)
+    {
+        _dialogoAbierto = false;
+        _expedientes.Insert(0, creado);
+        _expedientesPorId[creado.Id] = creado;
+        RecalcularActivos();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -121,14 +154,15 @@ else
             var expedientesTask = ExpedientesApiClient.ListarAsync();
             var plazosTask = PlazosApiClient.ListarAsync();
             var materiasTask = MateriasApiClient.ListarAsync();
-            await Task.WhenAll(expedientesTask, plazosTask, materiasTask);
+            var usuariosTask = UsuariosApiClient.ListarAsync();
+            await Task.WhenAll(expedientesTask, plazosTask, materiasTask, usuariosTask);
 
             _expedientes = await expedientesTask;
             _expedientesPorId = _expedientes.ToDictionary(e => e.Id);
             _materiasPorId = (await materiasTask).ToDictionary(m => m.Id);
+            _abogadosPorId = (await usuariosTask).ToDictionary(u => u.Id);
 
-            _expedientesActivos = _expedientes.Count(e =>
-                e.Estado is EstadoExpediente.Abierto or EstadoExpediente.EnTramite);
+            RecalcularActivos();
 
             // El endpoint ya los devuelve ordenados por fecha límite ascendente.
             _plazos = [.. (await plazosTask).Take(PlazosEnPanel)];

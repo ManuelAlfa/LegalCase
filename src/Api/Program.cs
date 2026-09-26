@@ -2,6 +2,7 @@ using System.Text;
 using LegalCaseManagement.Api.Auth;
 using LegalCaseManagement.Api.Endpoints;
 using LegalCaseManagement.Domain.Entities;
+using LegalCaseManagement.Infrastructure.Expedientes;
 using LegalCaseManagement.Infrastructure.Persistence;
 using LegalCaseManagement.Infrastructure.Plantillas;
 using LegalCaseManagement.Infrastructure.Storage;
@@ -37,6 +38,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.AddScoped<ICurrentTenantProvider, JwtTenantProvider>();
 builder.Services.AddScoped<TenantSessionInterceptor>();
+builder.Services.AddScoped<NumeradorExpedientes>();
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException("Falta la sección 'Jwt' en la configuración.");
@@ -115,30 +117,7 @@ if (app.Environment.IsDevelopment())
     app.MapDevTokenEndpoints();
 }
 
-app.MapGet("/api/expedientes", async (AppDbContext db) =>
-    await db.Expedientes
-        .OrderByDescending(e => e.FechaApertura)
-        .ToListAsync())
-    .RequireAuthorization();
-
-app.MapPost("/api/expedientes", async (AppDbContext db, ICurrentTenantProvider tenant, ExpedienteCreateRequest request) =>
-{
-    var expediente = new Expediente
-    {
-        TenantId = tenant.TenantId,
-        Titulo = request.Titulo,
-        Cliente = request.Cliente,
-        ClienteId = request.ClienteId,
-        MateriaId = request.MateriaId
-    };
-
-    db.Expedientes.Add(expediente);
-    await db.SaveChangesAsync();
-
-    return Results.Created($"/api/expedientes/{expediente.Id}", expediente);
-})
-.RequireAuthorization();
-
+app.MapExpedientesEndpoints();
 app.MapClientesEndpoints();
 app.MapPartesContrariasEndpoints();
 app.MapMateriasEndpoints();
@@ -152,4 +131,3 @@ app.MapAuditLogEndpoints();
 
 app.Run();
 
-public record ExpedienteCreateRequest(string Titulo, string Cliente, Guid? ClienteId = null, Guid? MateriaId = null);

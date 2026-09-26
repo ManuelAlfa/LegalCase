@@ -53,8 +53,11 @@ BEGIN;
 -- Tenant único: el despacho de la demo ya usado en el mockup ("Herrera &
 -- Asociados", visible en la cabecera de usuario del Panel principal).
 -- ---------------------------------------------------------------------
-INSERT INTO tenants (id, nombre, plan, created_at_utc) VALUES
-  ('00000000-0000-0000-0000-000000000001', 'Herrera & Asociados', 'pooled', '2026-01-15T09:00:00Z');
+-- anio_numeracion y ultimo_numero_expediente dejan el contador correlativo
+-- justo detrás del último expediente sembrado (2026/0151), de modo que el
+-- primer alta desde la interfaz sea 2026/0152.
+INSERT INTO tenants (id, nombre, plan, created_at_utc, anio_numeracion, ultimo_numero_expediente) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'Herrera & Asociados', 'pooled', '2026-01-15T09:00:00Z', 2026, 151);
 
 -- ---------------------------------------------------------------------
 -- Materias: catálogo mínimo que cubre las 5 áreas de práctica que
@@ -73,10 +76,10 @@ INSERT INTO materias (id, tenant_id, nombre) VALUES
 -- Panel principal). rol: Socio=0, Abogado=1, ProcuradorGraduadoSocial=2,
 -- Administrativo=3.
 -- ---------------------------------------------------------------------
-INSERT INTO usuarios (id, tenant_id, email, password_hash, rol) VALUES
-  ('00000000-0000-0000-0000-000000002001', '00000000-0000-0000-0000-000000000001', 'marta.alonso@herreraasociados.es', 'PENDIENTE_HASH_REAL_NO_USAR_PARA_LOGIN', 0),
-  ('00000000-0000-0000-0000-000000002002', '00000000-0000-0000-0000-000000000001', 'diego.ruiz@herreraasociados.es',   'PENDIENTE_HASH_REAL_NO_USAR_PARA_LOGIN', 1),
-  ('00000000-0000-0000-0000-000000002003', '00000000-0000-0000-0000-000000000001', 'carmen.soto@herreraasociados.es',  'PENDIENTE_HASH_REAL_NO_USAR_PARA_LOGIN', 1);
+INSERT INTO usuarios (id, tenant_id, nombre, email, password_hash, rol) VALUES
+  ('00000000-0000-0000-0000-000000002001', '00000000-0000-0000-0000-000000000001', 'Marta Alonso', 'marta.alonso@herreraasociados.es', 'PENDIENTE_HASH_REAL_NO_USAR_PARA_LOGIN', 0),
+  ('00000000-0000-0000-0000-000000002002', '00000000-0000-0000-0000-000000000001', 'Diego Ruiz',   'diego.ruiz@herreraasociados.es',   'PENDIENTE_HASH_REAL_NO_USAR_PARA_LOGIN', 1),
+  ('00000000-0000-0000-0000-000000002003', '00000000-0000-0000-0000-000000000001', 'Carmen Soto',  'carmen.soto@herreraasociados.es',  'PENDIENTE_HASH_REAL_NO_USAR_PARA_LOGIN', 1);
 
 -- ---------------------------------------------------------------------
 -- Clientes: uno por expediente salvo Beatriz García Serrano, que en el
@@ -102,13 +105,15 @@ INSERT INTO clientes (id, tenant_id, nombre, dni_cif, email, telefono, canal_pre
 -- numero_expediente autogenerado (ampliación del 2026-08-31) tampoco
 -- existe aún en el modelo real.
 -- ---------------------------------------------------------------------
-INSERT INTO expedientes (id, tenant_id, titulo, cliente, estado, fecha_apertura, fecha_cierre, cliente_id, materia_id, ultimo_folio) VALUES
-  ('00000000-0000-0000-0000-000000005001', '00000000-0000-0000-0000-000000000001', '2026/0143 — Rodríguez Marín vs. Ayuntamiento de Valencia', 'Antonio Rodríguez Marín',            0, '2026-06-02T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003001', '00000000-0000-0000-0000-000000001001', 0),
-  ('00000000-0000-0000-0000-000000005002', '00000000-0000-0000-0000-000000000001', '2026/0139 — García Serrano (despido)',                     'Beatriz García Serrano',             1, '2026-07-10T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000001002', 0),
-  ('00000000-0000-0000-0000-000000005003', '00000000-0000-0000-0000-000000000001', '2026/0151 — García Serrano (custodia y régimen de visitas)', 'Beatriz García Serrano',           0, '2026-09-08T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000001003', 0),
-  ('00000000-0000-0000-0000-000000005004', '00000000-0000-0000-0000-000000000001', '2026/0132 — Martín Cobo (reclamación de cantidad)',        'José Martín Cobo',                   1, '2026-05-20T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003003', '00000000-0000-0000-0000-000000001004', 0),
-  ('00000000-0000-0000-0000-000000005005', '00000000-0000-0000-0000-000000000001', '2026/0128 — Comunidad Propietarios Ronda Sur 12',           'Comunidad de Propietarios Ronda Sur 12', 0, '2026-03-11T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003004', '00000000-0000-0000-0000-000000001001', 0),
-  ('00000000-0000-0000-0000-000000005006', '00000000-0000-0000-0000-000000000001', '2026/0091 — Hidalgo Torres (extranjería)',                  'Marina Hidalgo Torres',              3, '2025-11-04T09:00:00Z', '2026-08-01T09:00:00Z', '00000000-0000-0000-0000-000000003005', '00000000-0000-0000-0000-000000001005', 0);
+-- El numero ya no vive dentro del titulo: tiene su propia columna, unica
+-- dentro del despacho. El titulo queda como asunto del expediente.
+INSERT INTO expedientes (id, tenant_id, numero, titulo, cliente, estado, fecha_apertura, fecha_cierre, cliente_id, materia_id, abogado_responsable_id, ultimo_folio) VALUES
+  ('00000000-0000-0000-0000-000000005001', '00000000-0000-0000-0000-000000000001', '2026/0143', 'Rodríguez Marín vs. Ayuntamiento de Valencia', 'Antonio Rodríguez Marín',            0, '2026-06-02T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003001', '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-000000002001', 0),
+  ('00000000-0000-0000-0000-000000005002', '00000000-0000-0000-0000-000000000001', '2026/0139', 'García Serrano (despido)',                     'Beatriz García Serrano',             1, '2026-07-10T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000001002', '00000000-0000-0000-0000-000000002002', 0),
+  ('00000000-0000-0000-0000-000000005003', '00000000-0000-0000-0000-000000000001', '2026/0151', 'García Serrano (custodia y régimen de visitas)', 'Beatriz García Serrano',           0, '2026-09-08T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000001003', '00000000-0000-0000-0000-000000002001', 0),
+  ('00000000-0000-0000-0000-000000005004', '00000000-0000-0000-0000-000000000001', '2026/0132', 'Martín Cobo (reclamación de cantidad)',        'José Martín Cobo',                   1, '2026-05-20T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003003', '00000000-0000-0000-0000-000000001004', '00000000-0000-0000-0000-000000002003', 0),
+  ('00000000-0000-0000-0000-000000005005', '00000000-0000-0000-0000-000000000001', '2026/0128', 'Comunidad Propietarios Ronda Sur 12',           'Comunidad de Propietarios Ronda Sur 12', 0, '2026-03-11T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003004', '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-000000002002', 0),
+  ('00000000-0000-0000-0000-000000005006', '00000000-0000-0000-0000-000000000001', '2026/0091', 'Hidalgo Torres (extranjería)',                  'Marina Hidalgo Torres',              3, '2025-11-04T09:00:00Z', '2026-08-01T09:00:00Z', '00000000-0000-0000-0000-000000003005', '00000000-0000-0000-0000-000000001005', '00000000-0000-0000-0000-000000002003', 0);
 
 -- ---------------------------------------------------------------------
 -- Partes contrarias: una por expediente activo (se omite en 0151, donde
