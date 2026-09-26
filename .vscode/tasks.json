@@ -1,0 +1,22 @@
+{
+  // Tarea de compilación que usan las configuraciones de .vscode/launch.json
+  // antes de arrancar. Se versiona a propósito: no tiene nada propio de una
+  // máquina concreta y es lo que hace que, recién clonado el repositorio,
+  // F5 funcione sin configurar nada.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/LegalCaseManagement.slnx",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "build", "isDefault": true }
+    }
+  ]
+}

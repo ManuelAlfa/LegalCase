@@ -109,12 +109,12 @@ src.tar.gz
 # =====================================================================
 # Editor, herramientas y sistema operativo
 #
-# .vscode NO se ignora entero: extensions.json y el script de instalación
-# de extensiones sí interesan al equipo. Solo se excluye lo propio de cada
-# máquina.
+# .vscode NO se ignora entero: extensions.json, tasks.json y launch.json
+# sí interesan al equipo — son los que hacen que, recién clonado el
+# repositorio, F5 arranque la aplicación sin configurar nada a mano. Solo
+# se excluye lo propio de cada máquina (preferencias personales del editor).
 # =====================================================================
 .vscode/settings.json
-.vscode/launch.json
 .vscode/*.local.json
 .idea/
 .claude/settings.local.json

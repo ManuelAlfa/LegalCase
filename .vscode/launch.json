@@ -1,0 +1,73 @@
+{
+  // Arranque y depuración de la aplicación desde VS Code.
+  //
+  // La interfaz (Web) NO funciona sola: necesita la Api en marcha, porque
+  // todas sus pantallas leen de http://localhost:5000 (ApiBaseUrl en
+  // src/Web/appsettings.json). Por eso lo normal es lanzar el compuesto
+  // "Aplicación completa (Api + Web)", no una configuración suelta.
+  //
+  // Antes de pulsar F5 tiene que estar levantada la infraestructura
+  // (docker compose up -d) y la base de datos preparada — ver INSTALACION.md.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Api",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/Api/bin/Debug/net10.0/Api.dll",
+      // cwd en la carpeta del proyecto: ASP.NET Core resuelve ahí la ruta de
+      // contenido y encuentra appsettings.json. Arrancar desde otro sitio es
+      // el fallo documentado en INSTALACION.md, apartado 6.
+      "cwd": "${workspaceFolder}/src/Api",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5000"
+      }
+    },
+    {
+      "name": "Web (interfaz)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/Web/bin/Debug/net10.0/Web.dll",
+      "cwd": "${workspaceFolder}/src/Web",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5100"
+      },
+      // Abre el navegador solo cuando el servidor ya escucha de verdad, en
+      // vez de adelantarse y mostrar un error de conexión.
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      }
+    },
+    {
+      // El Worker procesa documentos en segundo plano (OCR, foliado,
+      // clasificación). No hace falta para navegar por la interfaz.
+      "name": "Worker (procesado de documentos)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/Worker/bin/Debug/net10.0/Worker.dll",
+      "cwd": "${workspaceFolder}/src/Worker",
+      "stopAtEntry": false,
+      "env": { "DOTNET_ENVIRONMENT": "Development" }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Aplicación completa (Api + Web)",
+      "configurations": ["Api", "Web (interfaz)"],
+      "stopAll": true
+    },
+    {
+      "name": "Todo, incluido el Worker",
+      "configurations": ["Api", "Web (interfaz)", "Worker (procesado de documentos)"],
+      "stopAll": true
+    }
+  ]
+}
