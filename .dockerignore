@@ -1,0 +1,39 @@
+# Contexto de build de las imágenes .NET (Api, Web, Worker).
+#
+# Docker NO lee .gitignore, así que sin este fichero el contexto se llevaría
+# los ~2,3 GB de PDFs de prueba de OCR y los bin/obj de cada proyecto, que
+# además contaminan la compilación dentro del contenedor con artefactos
+# compilados en el host.
+
+# Salidas de compilación del host: se recompila todo dentro de la imagen.
+**/bin/
+**/obj/
+artifacts/
+
+# Datos de prueba y material pesado que no forma parte de la aplicación.
+test-data/
+.scratch_gaceta/
+**/checkpoints/
+*.whl
+*-wheels/
+
+# Servicios Python: tienen sus propias imágenes, no forman parte de estas.
+services/
+
+# Control de versiones, editor y documentación.
+.git/
+.github/
+.vscode/
+.idea/
+.claude/
+*.md
+LICENSE
+
+# Artefactos varios.
+*.log
+*.tmp
+*.tar.gz
+*.zip
+node_modules/
+playwright-report/
+test-results/

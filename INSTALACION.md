@@ -164,6 +164,18 @@ El script levanta la infraestructura si hace falta, espera a que Postgres
 responda, compila Api y Web, los arranca y comprueba que los dos contestan.
 Para pararlos: `./scripts/dev-arrancar.sh --parar`.
 
+Alternativa sin instalar el SDK de .NET, con todo en contenedores:
+
+```bash
+docker compose --profile apps up -d --build
+```
+
+Compila dentro de las imágenes y deja la Api, la interfaz y el Worker
+corriendo en los mismos puertos. Es más lenta para desarrollar (cada cambio
+exige reconstruir la imagen), así que la vía normal de trabajo sigue siendo
+el script. Ver el README, apartado «Arrancar la aplicación», para las cuatro
+opciones y cuándo usar cada una.
+
 Si prefieres hacerlo a mano, ten en cuenta que **hay que lanzar cada
 aplicación desde su directorio de salida**, no desde la raíz del repositorio:
 

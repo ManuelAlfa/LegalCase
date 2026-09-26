@@ -6,6 +6,15 @@ services:
     image: pgvector/pgvector:pg16
     container_name: legalcase-postgres
     restart: unless-stopped
+    healthcheck:
+      # Lo consultan los servicios del perfil "apps" con
+      # depends_on.condition: service_healthy. Sin esto, la Api arranca
+      # antes de que Postgres acepte conexiones y muere en bucle.
+      test: ["CMD-SHELL", "pg_isready -U legalcase -d legalcase"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     environment:
       POSTGRES_DB: legalcase
       POSTGRES_USER: legalcase
@@ -53,6 +62,12 @@ services:
     # hostname fijo, el mismo nodo Erlang persiste entre recreaciones.
     hostname: rabbitmq
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin_dev
@@ -374,6 +389,107 @@ services:
     restart: unless-stopped
     ports:
       - "8002:8000"
+
+  # =====================================================================
+  # Aplicaciones .NET — perfil "apps"
+  #
+  # No se levantan con `docker compose up -d` a secas: hay que pedirlas
+  # expresamente con `docker compose --profile apps up -d --build`. El
+  # desarrollo del día a día sigue usando scripts/dev-arrancar.sh, que
+  # compila en el host y da un ciclo mucho más corto (ver README).
+  #
+  # Este perfil existe para tener el despliegue reproducible construido y
+  # probado antes de necesitarlo, no para usarlo a diario. Cuando se cierre
+  # la Fase 6, la idea es quitar `profiles` para que pasen a levantarse por
+  # defecto.
+  #
+  # Diferencia clave con el arranque en el host: aquí los servicios se
+  # llaman por su nombre en la red de Docker y con su puerto INTERNO
+  # (postgres:5432, no localhost:15432). Todas las aplicaciones leen su
+  # configuración por `builder.Configuration`, así que basta con variables
+  # de entorno: no hay ningún cambio de código, y el doble subrayado es la
+  # forma de anidar secciones (ConnectionStrings__Default = ConnectionStrings:Default).
+  # =====================================================================
+  api:
+    profiles: ["apps"]
+    build:
+      context: .
+      args:
+        PROYECTO: src/Api/Api.csproj
+    image: legalcase-api:dev
+    container_name: legalcase-api
+    command: ["Api.dll"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=legalcase;Username=legalcase_app;Password=legalcase_app_dev"
+      RabbitMq__Host: rabbitmq
+      DocumentStorage__Endpoint: "http://seaweedfs:8333"
+    ports:
+      # Mismo puerto que en el host con dev-arrancar.sh, para que la Api
+      # esté siempre en la misma URL se arranque como se arranque.
+      - "5000:8080"
+
+  web:
+    profiles: ["apps"]
+    build:
+      context: .
+      args:
+        PROYECTO: src/Web/Web.csproj
+    image: legalcase-web:dev
+    container_name: legalcase-web
+    command: ["Web.dll"]
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: "8080"
+      # La interfaz es Blazor Server: las llamadas a la Api salen del
+      # servidor, no del navegador, así que van por la red interna de
+      # Docker y no por el puerto publicado.
+      ApiBaseUrl: "http://api:8080"
+    ports:
+      - "5100:8080"
+
+  worker:
+    profiles: ["apps"]
+    build:
+      context: .
+      args:
+        PROYECTO: src/Worker/Worker.csproj
+    image: legalcase-worker:dev
+    container_name: legalcase-worker
+    command: ["Worker.dll"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_started
+      ocr-paddle:
+        condition: service_started
+      doc-classifier:
+        condition: service_started
+    environment:
+      # El Worker es un host genérico, no ASP.NET: su variable de entorno
+      # es DOTNET_ENVIRONMENT, no ASPNETCORE_ENVIRONMENT.
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=legalcase;Username=legalcase_app;Password=legalcase_app_dev"
+      RabbitMq__Host: rabbitmq
+      DocumentStorage__Endpoint: "http://seaweedfs:8333"
+      Ocr__BaseUrl: "http://ocr-paddle:8000"
+      Clasificador__BaseUrl: "http://doc-classifier:8000"
 
 volumes:
   postgres_data:

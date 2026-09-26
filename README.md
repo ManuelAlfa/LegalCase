@@ -160,6 +160,48 @@ desde otro sitio hace que no encuentre `appsettings.json`: la Api falla con
 un error claro, pero el Worker se queda callado usando unas credenciales por
 defecto equivocadas, que es mucho peor de diagnosticar.
 
+### Opción D — todo en contenedores
+
+```bash
+docker compose --profile apps up -d --build
+```
+
+Levanta la infraestructura **y** la Api, la interfaz y el Worker como
+contenedores, en los mismos puertos de siempre (5000 y 5100). No hace falta
+el SDK de .NET en la máquina: se compila dentro de la imagen.
+
+Hay que pedirlo con `--profile apps` a propósito. Un `docker compose up -d`
+a secas sigue levantando solo la infraestructura, como hasta ahora.
+
+**Cuándo usar esta vía**: para comprobar que el despliegue reproducible
+sigue funcionando (conviene hacerlo al cerrar cada fase, o el perfil se
+pudre sin que nadie se entere), o para levantar el sistema en una máquina
+donde no quieras instalar nada de .NET.
+
+**Cuándo no**: para desarrollar. Cada cambio de código obliga a reconstruir
+la imagen, frente a los pocos segundos de compilación incremental de las
+opciones A y C. Mientras se está construyendo la interfaz, esta vía es la
+peor de las cuatro.
+
+Para pararlo:
+
+```bash
+docker compose --profile apps stop api web worker   # deja la infraestructura
+docker compose --profile apps down                  # para además la infraestructura
+```
+
+> **No mezcles vías.** Si tienes la aplicación corriendo con
+> `dev-arrancar.sh` o desde el IDE, los puertos 5000 y 5100 están ocupados y
+> los contenedores no arrancarán. Para lo uno antes de levantar lo otro.
+
+Dentro de los contenedores la configuración es distinta, y conviene saberlo
+para leer los logs: Postgres es `postgres:5432` (no `localhost:15432`) y la
+interfaz llama a la Api en `http://api:8080` por la red interna de Docker.
+Eso no está duplicado en ningún `appsettings.json`: son variables de entorno
+en `docker-compose.yml`, porque todas las aplicaciones leen su configuración
+por `builder.Configuration`. **No hay ninguna diferencia de código entre
+correr en el host y correr en contenedor.**
+
 ### Comprobar que ha arrancado bien
 
 ```bash
