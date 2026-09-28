@@ -377,6 +377,7 @@ def _agrupar_en_lineas(
     centros_y: np.ndarray,
     y_tops: np.ndarray,
     y_bottoms: np.ndarray,
+    altura_mediana: float,
 ) -> List[List[int]]:
     """Agrupa cajas que pertenecen a la misma línea de texto.
 
@@ -386,20 +387,38 @@ def _agrupar_en_lineas(
     aguanta que las cajas tengan alturas distintas (mayúsculas, tildes,
     números) y que el escaneo esté ligeramente torcido, que es justo cuando
     falla una rejilla fija.
+
+    Las cajas anormalmente altas no ensanchan la banda. Son texto girado del
+    margen —el "USO OFICIAL" vertical de los documentos de juzgado, sellos
+    laterales— y cada letra suya puede medir cuatro veces una línea normal.
+    Dejándolas crecer la banda, se tragaban las líneas siguientes y estas
+    salían ordenadas de izquierda a derecha en vez de arriba abajo
+    (regresión detectada y corregida el 2026-09-28 sobre un auto judicial
+    con marca "USO OFICIAL" en el margen).
     """
+    limite_altura = 2.5 * altura_mediana
     lineas: List[List[int]] = []
     banda_arriba = 0.0
     banda_abajo = 0.0
 
     for i in sorted(indices, key=lambda k: centros_y[k]):
-        if lineas and banda_arriba <= centros_y[i] <= banda_abajo:
+        anomala = (y_bottoms[i] - y_tops[i]) > limite_altura
+
+        if not anomala and lineas and banda_arriba <= centros_y[i] <= banda_abajo:
             lineas[-1].append(i)
             # La banda crece con la caja añadida: una línea con una tilde
             # alta o un número bajo sigue siendo la misma línea.
             banda_arriba = min(banda_arriba, y_tops[i])
             banda_abajo = max(banda_abajo, y_bottoms[i])
+            continue
+
+        lineas.append([i])
+        if anomala:
+            # Se queda en su propia línea y con una banda del alto de una
+            # línea normal, para no arrastrar a las de debajo.
+            banda_arriba = float(centros_y[i]) - altura_mediana / 2
+            banda_abajo = float(centros_y[i]) + altura_mediana / 2
         else:
-            lineas.append([i])
             banda_arriba = float(y_tops[i])
             banda_abajo = float(y_bottoms[i])
 
@@ -426,6 +445,8 @@ def _ordenar_por_lectura(polys: List[np.ndarray], textos: List[str]) -> List[str
     y_tops = np.array([poly[:, 1].min() for poly in polys])
     y_bottoms = np.array([poly[:, 1].max() for poly in polys])
     centros_y = (y_tops + y_bottoms) / 2.0
+    alturas = y_bottoms - y_tops
+    altura_mediana = float(np.median(alturas)) if len(alturas) else 20.0
 
     x_izquierdo = float(min(poly[:, 0].min() for poly in polys))
     x_derecho = float(max(poly[:, 0].max() for poly in polys))
@@ -436,7 +457,9 @@ def _ordenar_por_lectura(polys: List[np.ndarray], textos: List[str]) -> List[str
     # izquierda antes de empezar la derecha, no línea a línea cruzando.
     for columna in sorted(set(columna_idx)):
         indices_columna = [i for i in range(len(textos)) if columna_idx[i] == columna]
-        for linea in _agrupar_en_lineas(indices_columna, centros_y, y_tops, y_bottoms):
+        for linea in _agrupar_en_lineas(
+            indices_columna, centros_y, y_tops, y_bottoms, altura_mediana
+        ):
             ordenados.extend(sorted(linea, key=lambda i: centros_x[i]))
 
     return [textos[i] for i in ordenados]
