@@ -35,6 +35,35 @@ public static class Presentacion
         _ => "cps-chip-default",
     };
 
+    public static string TextoEstadoDocumento(EstadoProcesamientoDocumento estado) => estado switch
+    {
+        EstadoProcesamientoDocumento.Pendiente => "En cola",
+        EstadoProcesamientoDocumento.Procesando => "Procesando",
+        EstadoProcesamientoDocumento.Completado => "Completado",
+        EstadoProcesamientoDocumento.Error => "Error",
+        _ => estado.ToString(),
+    };
+
+    public static string ClaseChipEstadoDocumento(EstadoProcesamientoDocumento estado) => estado switch
+    {
+        EstadoProcesamientoDocumento.Completado => "cps-chip-success",
+        EstadoProcesamientoDocumento.Procesando => "cps-chip-info",
+        EstadoProcesamientoDocumento.Error => "cps-chip-error",
+        _ => "cps-chip-default",
+    };
+
+    /// <summary>Tamaño de archivo en la unidad que toque, con coma decimal.</summary>
+    public static string Tamano(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024d:0.#} KB".Replace('.', ',');
+        return $"{bytes / (1024d * 1024d):0.#} MB".Replace('.', ',');
+    }
+
+    /// <summary>Confianza 0-1 como en el mockup: dos decimales y coma.</summary>
+    public static string Confianza(double? valor) =>
+        valor is { } v ? v.ToString("0.00", CulturaEs) : "—";
+
     /// <summary>Días que faltan para un plazo, contados en fechas completas.</summary>
     public static int DiasHasta(DateTime fechaLimite) =>
         (fechaLimite.Date - DateTime.UtcNow.Date).Days;

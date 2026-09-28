@@ -443,3 +443,52 @@ body { font-family: var(--font-body); color: var(--mud-text-primary); -webkit-fo
   cursor: pointer; text-decoration: none;
 }
 .cps-enlace-alta:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------------------
+   Pantalla de Documentos y OCR
+   --------------------------------------------------------------------- */
+
+/* Dos columnas: listado ancho + panel de resumen. Se apilan en pantallas
+   estrechas, donde el resumen pasa debajo del listado. */
+.cps-dos-columnas { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .cps-dos-columnas { grid-template-columns: 1fr; } }
+
+.cps-dropzone {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 28px 16px;
+  border: 2px dashed var(--mud-divider); border-radius: var(--mud-radius);
+  text-align: center;
+}
+.cps-dropzone b { font-size: 14.5px; }
+.cps-dropzone span { font-size: 12px; color: var(--mud-text-secondary); }
+.cps-dropzone:focus-within { border-color: var(--mud-primary); }
+
+/* El <InputFile> cubre toda la zona, invisible: así el mismo control sirve
+   para arrastrar y soltar y para abrir el explorador al hacer clic, sin
+   JavaScript propio. */
+.cps-dropzone-input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer;
+}
+.cps-dropzone-inactiva { opacity: .55; }
+.cps-dropzone-aviso { color: var(--mud-warning) !important; font-weight: 500; }
+
+.cps-subidas { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cps-subidas li { display: flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; }
+.cps-subidas small { width: 100%; color: var(--mud-error); font-size: 11.5px; }
+
+.cps-resumen-fila {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--mud-divider);
+}
+.cps-resumen-fila span { color: var(--mud-text-secondary); }
+
+.cps-chip-mini { padding: 1px 8px; font-size: 10.5px; margin-left: 6px; }
+.cps-celda-error { display: block; font-size: 11.5px; color: var(--mud-error); margin-top: 3px; }
+
+/* Botones de descarga de la tabla de documentos: apilados en vertical para
+   que no ensanchen la fila, y sin resaltar — descargar es una acción
+   secundaria frente a leer el estado del proceso. */
+.cps-descargas { white-space: nowrap; }
+.cps-descargas .cps-btn { padding: 3px 8px; font-size: 11.5px; }

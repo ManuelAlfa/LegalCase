@@ -1,0 +1,439 @@
+@* Documentos y OCR (tarea 6.5). Traducción de la pantalla "screen-ocr" de
+   mockup_pantallas_compas_mudblazor.html.
+
+   Tres diferencias deliberadas respecto al mockup, por cómo funciona de
+   verdad el pipeline:
+
+   1. El mockup tiene casillas por fila y un botón "Procesar seleccionados".
+      Aquí no: subir un documento YA arranca su procesamiento (la Api lo deja
+      en Procesando y publica el mensaje que consume el Worker). Una casilla
+      sin acción que aplicar sería un control que no hace nada.
+   2. El mockup muestra una barra de progreso con "página 84/113". No se
+      guarda el avance por página en ninguna parte, así que mostrar un
+      porcentaje sería inventarlo. Se muestra el estado, que sí es real.
+   3. El expediente se elige ANTES de subir, no después: el endpoint de
+      subida es por expediente, y preguntarlo al final obligaría a retener
+      el archivo sin sitio donde guardarlo. *@
+@page "/ocr"
+@using LegalCaseManagement.Domain.Entities
+@using Web.Services
+@implements IDisposable
+@inject DocumentosApiClient DocumentosApiClient
+@inject ExpedientesApiClient ExpedientesApiClient
+@inject IJSRuntime JS
+
+<PageTitle>Documentos y OCR — Compás</PageTitle>
+
+<div class="cps-crumbs">
+    <a href="/expedientes">Expedientes</a> ·
+    <span class="current">OCR / Foliado</span>
+</div>
+
+<div class="cps-pagehead">
+    <h1>Documentos y OCR</h1>
+</div>
+
+<div class="cps-card" style="margin-bottom:16px">
+    <div class="cps-field" style="max-width:420px;margin-bottom:12px">
+        <label for="ocr-expediente">Subir al expediente</label>
+        <select id="ocr-expediente" @bind="_expedienteDestino">
+            <option value="">— Elige un expediente —</option>
+            @foreach (var expediente in _expedientes)
+            {
+                <option value="@expediente.Id">@expediente.Numero — @expediente.Titulo</option>
+            }
+        </select>
+    </div>
+
+    <div class="cps-dropzone @(_puedeSubir ? "" : "cps-dropzone-inactiva")">
+        @if (_puedeSubir)
+        {
+            @* El InputFile va encima, transparente y a pantalla completa de
+               la zona: así el mismo control sirve para arrastrar y para
+               hacer clic, sin JavaScript propio. *@
+            <InputFile class="cps-dropzone-input" multiple OnChange="AlElegirArchivos"
+                       accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff" />
+        }
+        <svg class="icon" style="width:30px;height:30px;color:var(--mud-primary)"><use href="#i-upload" /></svg>
+        <b>Arrastra tus documentos aquí</b>
+        <span>PDF o imágenes escaneadas (JPG, PNG, TIFF) · o busca en tu ordenador</span>
+        @if (!_puedeSubir)
+        {
+            <span class="cps-dropzone-aviso">Elige primero a qué expediente pertenecen.</span>
+        }
+    </div>
+
+    @if (_subiendo.Count > 0)
+    {
+        <ul class="cps-subidas">
+            @foreach (var subida in _subiendo)
+            {
+                <li>
+                    <span class="cps-chip @(subida.Error is null ? "cps-chip-info" : "cps-chip-error")">
+                        @(subida.Error is null ? "Subiendo…" : "Error")
+                    </span>
+                    @subida.Nombre
+                    @if (subida.Error is not null)
+                    {
+                        <small>@subida.Error</small>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+<div class="cps-dos-columnas">
+    <div class="cps-card">
+        <div class="cps-list-toolbar">
+            <label class="cps-campo-busqueda">
+                <svg class="icon" style="width:16px;height:16px" aria-hidden="true"><use href="#i-search" /></svg>
+                <input type="search" placeholder="Filtrar por nombre de archivo…"
+                       aria-label="Filtrar documentos"
+                       value="@_filtro" @oninput="AlEscribirFiltro" />
+            </label>
+            <div class="cps-field" style="width:220px">
+                <select @bind="_filtroExpediente" aria-label="Filtrar por expediente">
+                    <option value="">Expediente: todos</option>
+                    @foreach (var expediente in _expedientes)
+                    {
+                        <option value="@expediente.Id">@expediente.Numero</option>
+                    }
+                </select>
+            </div>
+            <span class="cps-count" style="margin-left:auto">
+                mostrando @Filtrados.Count de @_documentos.Count
+            </span>
+        </div>
+
+        @if (_cargando)
+        {
+            <p class="cps-vacio">Cargando documentos…</p>
+        }
+        else if (_error is not null)
+        {
+            <div class="cps-alert-error" role="alert">
+                <svg class="icon" style="width:16px;height:16px"><use href="#i-x" /></svg>
+                @_error
+            </div>
+        }
+        else if (_documentos.Count == 0)
+        {
+            <p class="cps-vacio">Todavía no se ha subido ningún documento. Arrastra el primero arriba.</p>
+        }
+        else if (Filtrados.Count == 0)
+        {
+            <p class="cps-vacio">Ningún documento coincide con el filtro.</p>
+        }
+        else
+        {
+            <div class="cps-table-wrap">
+                <table class="cps-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Tipo</th>
+                            <th scope="col">Archivo</th>
+                            <th scope="col">Folios</th>
+                            <th scope="col">Confianza</th>
+                            <th scope="col">Estado</th>
+                            <th scope="col"><span class="cps-visualmente-oculto">Descargar</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var documento in Filtrados)
+                        {
+                            <tr>
+                                <td><span class="cps-chip cps-chip-default">@Extension(documento.NombreArchivo)</span></td>
+                                <td>
+                                    <b>@documento.NombreArchivo</b>
+                                    <span class="cps-celda-sub">
+                                        @if (documento.Paginas is { } paginas)
+                                        {
+                                            <text>@paginas pág. · </text>
+                                        }
+                                        @Presentacion.Tamano(documento.TamanoBytes)
+                                        · @NumeroExpediente(documento.ExpedienteId)
+                                        @* Solo se muestra cuando el clasificador ha
+                                           reconocido algo de verdad: "Sin clasificar"
+                                           con confianza 0,00 no es un resultado, es la
+                                           ausencia de resultado, y pintarlo en ámbar
+                                           como los demás hacía parecer lo contrario. *@
+                                        @if (EstaClasificado(documento))
+                                        {
+                                            <span class="cps-chip cps-chip-warning cps-chip-mini">
+                                                @documento.TipoDocumento
+                                                @if (documento.TipoDocumentoConfianza is { } c)
+                                                {
+                                                    <text>&nbsp;@Presentacion.Confianza(c)</text>
+                                                }
+                                            </span>
+                                        }
+                                    </span>
+                                    @if (documento.MensajeError is { } mensaje)
+                                    {
+                                        <span class="cps-celda-error">@mensaje</span>
+                                    }
+                                </td>
+                                <td class="tabular">
+                                    @(documento.FolioInicio is { } ini && documento.FolioFin is { } fin
+                                        ? $"{ini}–{fin}"
+                                        : "—")
+                                </td>
+                                <td class="tabular">@Presentacion.Confianza(documento.ConfianzaOcrMedia)</td>
+                                <td>
+                                    <span class="cps-chip @Presentacion.ClaseChipEstadoDocumento(documento.EstadoProcesamiento)">
+                                        @Presentacion.TextoEstadoDocumento(documento.EstadoProcesamiento)
+                                    </span>
+                                </td>
+                                <td class="row-actions cps-descargas">
+                                    @if (documento.TienePdfProcesado)
+                                    {
+                                        <button type="button" class="cps-btn cps-btn-text cps-btn-sm"
+                                                title="PDF con foliado y texto buscable"
+                                                @onclick="() => Descargar(documento, original: false)">
+                                            <svg class="icon" style="width:14px;height:14px"><use href="#i-download" /></svg>
+                                            Procesado
+                                        </button>
+                                    }
+                                    <button type="button" class="cps-btn cps-btn-text cps-btn-sm"
+                                            title="El archivo tal y como se subió, sin sello ni capa de texto"
+                                            @onclick="() => Descargar(documento, original: true)">
+                                        Original
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <aside class="cps-card">
+        <h3>Resumen del proceso</h3>
+        <div class="cps-resumen-fila"><span>Documentos</span><b class="tabular">@_documentos.Count</b></div>
+        <div class="cps-resumen-fila"><span>Completados</span><b class="tabular">@Cuenta(EstadoProcesamientoDocumento.Completado)</b></div>
+        <div class="cps-resumen-fila"><span>En proceso o en cola</span><b class="tabular">@EnCurso</b></div>
+        <div class="cps-resumen-fila"><span>Con error</span><b class="tabular">@Cuenta(EstadoProcesamientoDocumento.Error)</b></div>
+        <div class="cps-resumen-fila"><span>Páginas procesadas</span><b class="tabular">@PaginasTotales</b></div>
+        <div class="cps-resumen-fila"><span>Motor</span><b>PP-OCRv6</b></div>
+
+        <p class="cps-ayuda" style="margin-top:12px">
+            Subir un documento arranca su procesamiento automáticamente. Se reconoce el texto,
+            se folia (numeración Bates correlativa dentro del expediente) y se clasifica el tipo
+            de documento.
+        </p>
+
+        @if (EnCurso > 0)
+        {
+            <p class="cps-ayuda">
+                Hay @EnCurso documento@(EnCurso == 1 ? "" : "s") en curso. Esta pantalla se
+                actualiza sola cada @(IntervaloRefrescoSegundos) segundos.
+            </p>
+        }
+    </aside>
+</div>
+
+@code {
+    private const int IntervaloRefrescoSegundos = 5;
+
+    private bool _cargando = true;
+    private string? _error;
+    private List<DocumentoResumen> _documentos = [];
+    private List<Expediente> _expedientes = [];
+
+    private string _expedienteDestino = string.Empty;
+    private string _filtro = string.Empty;
+    private string _filtroExpediente = string.Empty;
+
+    private readonly List<SubidaEnCurso> _subiendo = [];
+    private Timer? _refresco;
+
+    private bool _puedeSubir => Guid.TryParse(_expedienteDestino, out _);
+
+    private int EnCurso => _documentos.Count(d =>
+        d.EstadoProcesamiento is EstadoProcesamientoDocumento.Pendiente
+                              or EstadoProcesamientoDocumento.Procesando);
+
+    private int PaginasTotales => _documentos.Sum(d => d.Paginas ?? 0);
+
+    private int Cuenta(EstadoProcesamientoDocumento estado) =>
+        _documentos.Count(d => d.EstadoProcesamiento == estado);
+
+    private List<DocumentoResumen> Filtrados => [.. _documentos.Where(Coincide)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarAsync();
+
+        // Mientras algo esté procesándose, el estado cambia en el Worker sin
+        // que la pantalla se entere. Se refresca sola en vez de obligar a
+        // pulsar F5; el temporizador solo pide datos si hay algo en curso.
+        _refresco = new Timer(async _ => await RefrescarSiHayTrabajo(),
+            null, TimeSpan.FromSeconds(IntervaloRefrescoSegundos),
+            TimeSpan.FromSeconds(IntervaloRefrescoSegundos));
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            var documentosTask = DocumentosApiClient.ListarAsync();
+            var expedientesTask = ExpedientesApiClient.ListarAsync();
+            await Task.WhenAll(documentosTask, expedientesTask);
+
+            _documentos = await documentosTask;
+            _expedientes = await expedientesTask;
+            _error = null;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "No se pudieron cargar los documentos. Comprueba que la Api esté en marcha.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task RefrescarSiHayTrabajo()
+    {
+        if (EnCurso == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _documentos = await DocumentosApiClient.ListarAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (HttpRequestException)
+        {
+            // Un fallo puntual de red no debe tirar la pantalla: se reintenta
+            // en el siguiente tic.
+        }
+    }
+
+    private async Task AlElegirArchivos(InputFileChangeEventArgs e)
+    {
+        if (!Guid.TryParse(_expedienteDestino, out var expedienteId))
+        {
+            return;
+        }
+
+        foreach (var archivo in e.GetMultipleFiles(maximumFileCount: 20))
+        {
+            var subida = new SubidaEnCurso(archivo.Name);
+            _subiendo.Add(subida);
+            StateHasChanged();
+
+            try
+            {
+                // El límite por defecto de OpenReadStream son 512 KB, que no
+                // llega ni para un escaneo corto. Se sube a 200 MB, que cubre
+                // los documentos reales con los que se ha probado el OCR.
+                await using var contenido = archivo.OpenReadStream(maxAllowedSize: 200L * 1024 * 1024);
+                var resultado = await DocumentosApiClient.SubirAsync(
+                    expedienteId, contenido, archivo.Name, archivo.ContentType);
+
+                if (resultado.EsCorrecto)
+                {
+                    _subiendo.Remove(subida);
+                    _documentos.Insert(0, resultado.Valor!);
+                }
+                else
+                {
+                    subida.Error = resultado.ErrorGeneral ?? "No se pudo subir.";
+                }
+            }
+            catch (IOException ex)
+            {
+                subida.Error = $"No se pudo leer el archivo: {ex.Message}";
+            }
+            catch (HttpRequestException)
+            {
+                subida.Error = "No se pudo contactar con la Api.";
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private bool Coincide(DocumentoResumen documento)
+    {
+        if (Guid.TryParse(_filtroExpediente, out var expedienteId)
+            && documento.ExpedienteId != expedienteId)
+        {
+            return false;
+        }
+
+        var texto = _filtro.Trim();
+        return texto.Length == 0
+            || documento.NombreArchivo.Contains(texto, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void AlEscribirFiltro(ChangeEventArgs e) => _filtro = e.Value?.ToString() ?? string.Empty;
+
+    private string NumeroExpediente(Guid expedienteId) =>
+        _expedientes.FirstOrDefault(x => x.Id == expedienteId)?.Numero ?? "—";
+
+    // El clasificador devuelve "Sin clasificar" con confianza 0 cuando no
+    // reconoce el tipo: eso no es una clasificación y no debe mostrarse como
+    // tal.
+    private static bool EstaClasificado(DocumentoResumen documento) =>
+        !string.IsNullOrWhiteSpace(documento.TipoDocumento)
+        && !documento.TipoDocumento.Equals("Sin clasificar", StringComparison.OrdinalIgnoreCase)
+        && documento.TipoDocumentoConfianza is > 0;
+
+    private async Task Descargar(DocumentoResumen documento, bool original)
+    {
+        try
+        {
+            var contenido = await DocumentosApiClient.DescargarAsync(documento.Id, original);
+            if (contenido is null)
+            {
+                _error = "No se pudo descargar el documento.";
+                return;
+            }
+
+            var nombre = original
+                ? documento.NombreArchivo
+                : NombreProcesado(documento.NombreArchivo);
+
+            // El archivo va al navegador por el circuito de Blazor: un enlace
+            // normal no puede llevar la cabecera Authorization que exige la Api.
+            using var flujo = new MemoryStream(contenido);
+            using var referencia = new DotNetStreamReference(flujo);
+            await JS.InvokeVoidAsync("compasDescargas.descargarArchivo", nombre, referencia);
+        }
+        catch (HttpRequestException)
+        {
+            _error = "No se pudo contactar con la Api para descargar el documento.";
+        }
+    }
+
+    private static string NombreProcesado(string nombreArchivo)
+    {
+        var punto = nombreArchivo.LastIndexOf('.');
+        return punto > 0
+            ? $"{nombreArchivo[..punto]}_procesado{nombreArchivo[punto..]}"
+            : $"{nombreArchivo}_procesado";
+    }
+
+    private static string Extension(string nombreArchivo)
+    {
+        var punto = nombreArchivo.LastIndexOf('.');
+        return punto >= 0 && punto < nombreArchivo.Length - 1
+            ? nombreArchivo[(punto + 1)..].ToUpperInvariant()
+            : "ARCHIVO";
+    }
+
+    public void Dispose() => _refresco?.Dispose();
+
+    private sealed class SubidaEnCurso(string nombre)
+    {
+        public string Nombre { get; } = nombre;
+        public string? Error { get; set; }
+    }
+}

@@ -13,6 +13,7 @@
 @inject PlazosApiClient PlazosApiClient
 @inject MateriasApiClient MateriasApiClient
 @inject UsuariosApiClient UsuariosApiClient
+@inject DocumentosApiClient DocumentosApiClient
 @inject NavigationManager Navigation
 
 <PageTitle>Panel principal — Compás</PageTitle>
@@ -43,14 +44,17 @@ else
         </div>
         <div class="cps-stat-card">
             <span class="label">Pendientes de OCR</span>
-            <span class="value tabular">—</span>
-            <span class="sub">sin datos todavía</span>
+            <span class="value tabular">@_pendientesOcr</span>
+            <span class="sub">de @_documentos.Count documento@(_documentos.Count == 1 ? "" : "s")</span>
         </div>
         <div class="cps-stat-card">
-            <span class="label">Páginas procesadas / mes</span>
-            <span class="value tabular">—</span>
-            <span class="sub">sin datos todavía</span>
+            <span class="label">Páginas procesadas</span>
+            <span class="value tabular">@_paginasProcesadas</span>
+            <span class="sub">total acumulado</span>
         </div>
+        @* Sigue sin dato real: el almacenamiento ocupado habría que
+           preguntárselo a SeaweedFS, y no hay endpoint que lo exponga.
+           Antes que enseñar una cifra inventada, se dice que falta. *@
         <div class="cps-stat-card">
             <span class="label">Almacenamiento</span>
             <span class="value tabular">—</span>
@@ -119,6 +123,9 @@ else
     private bool _dialogoAbierto;
 
     private int _expedientesActivos;
+    private List<DocumentoResumen> _documentos = [];
+    private int _pendientesOcr;
+    private int _paginasProcesadas;
 
     // Cuántos plazos caben en el panel: el resto vive en su propia pantalla
     // (todavía no construida), igual que en el mockup.
@@ -155,12 +162,19 @@ else
             var plazosTask = PlazosApiClient.ListarAsync();
             var materiasTask = MateriasApiClient.ListarAsync();
             var usuariosTask = UsuariosApiClient.ListarAsync();
-            await Task.WhenAll(expedientesTask, plazosTask, materiasTask, usuariosTask);
+            var documentosTask = DocumentosApiClient.ListarAsync();
+            await Task.WhenAll(expedientesTask, plazosTask, materiasTask, usuariosTask, documentosTask);
 
             _expedientes = await expedientesTask;
             _expedientesPorId = _expedientes.ToDictionary(e => e.Id);
             _materiasPorId = (await materiasTask).ToDictionary(m => m.Id);
             _abogadosPorId = (await usuariosTask).ToDictionary(u => u.Id);
+
+            _documentos = await documentosTask;
+            _pendientesOcr = _documentos.Count(d =>
+                d.EstadoProcesamiento is EstadoProcesamientoDocumento.Pendiente
+                                      or EstadoProcesamientoDocumento.Procesando);
+            _paginasProcesadas = _documentos.Sum(d => d.Paginas ?? 0);
 
             RecalcularActivos();
 

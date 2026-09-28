@@ -139,7 +139,16 @@ public class DocumentoSubidoConsumer : IConsumer<DocumentoSubido>
                     // la tarea E.1, todavía no implementada.
                     var pdfSellado = _foliador.EstamparFolios(descarga.Bytes, rango.FolioInicio, paginas);
                     using var streamSellado = new MemoryStream(pdfSellado);
-                    await _storage.SubirAsync(documento.RutaAlmacenamiento, streamSellado, documento.ContentType, context.CancellationToken);
+
+                    // Se guarda en una clave propia, no encima del original:
+                    // antes el sellado sobrescribía el archivo subido y el
+                    // escaneo tal cual lo entregó el cliente dejaba de
+                    // existir. Reprocesar ahora solo pisa el procesado.
+                    documento.RutaAlmacenamientoProcesado =
+                        RutaProcesado(documento.RutaAlmacenamiento);
+
+                    await _storage.SubirAsync(documento.RutaAlmacenamientoProcesado, streamSellado,
+                        documento.ContentType, context.CancellationToken);
                 }
             }
 
@@ -303,6 +312,20 @@ public class DocumentoSubidoConsumer : IConsumer<DocumentoSubido>
         var paginas = await _ocrClient.ReconocerAsync(streamParaOcr, documento.NombreArchivo, documento.ContentType, cancellationToken);
         LogPuntoDeControlMemoria("7. tras recibir la respuesta del OCR", documento.Id);
         return new DocumentoDescargado(bytes, paginas);
+    }
+
+    /// <summary>
+    /// Clave del PDF procesado a partir de la del original:
+    /// ".../Demanda.pdf" -> ".../Demanda_procesado.pdf". Se deriva en vez de
+    /// inventar una carpeta aparte para que original y procesado queden
+    /// juntos y sea evidente cuál es cuál al mirar el almacenamiento.
+    /// </summary>
+    private static string RutaProcesado(string rutaOriginal)
+    {
+        var punto = rutaOriginal.LastIndexOf('.');
+        return punto > rutaOriginal.LastIndexOf('/')
+            ? $"{rutaOriginal[..punto]}_procesado{rutaOriginal[punto..]}"
+            : $"{rutaOriginal}_procesado";
     }
 
     // Bytes originales descargados de SeaweedFS junto con el texto extraído/OCRizado

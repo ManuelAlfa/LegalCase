@@ -98,6 +98,79 @@ public abstract class ApiClientAutenticado(HttpClient http, TokenProvider tokenP
             : ResultadoApi<T>.DeExito(creado);
     }
 
+    /// <summary>
+    /// Sube un archivo como multipart/form-data. Va aparte de CrearAsync
+    /// porque el cuerpo no es JSON y el contenido se transmite en streaming:
+    /// leer el archivo entero en memoria antes de enviarlo rompería con los
+    /// documentos grandes, que son justo el caso de uso del OCR.
+    /// </summary>
+    protected async Task<ResultadoApi<T>> SubirArchivoAsync<T>(
+        string ruta, Stream contenido, string nombreArchivo, string contentType, CancellationToken ct)
+    {
+        using var formulario = new MultipartFormDataContent();
+        using var parte = new StreamContent(contenido);
+        parte.Headers.ContentType = new MediaTypeHeaderValue(
+            string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType);
+
+        // El nombre "file" tiene que coincidir con el parámetro IFormFile del
+        // endpoint: es como ASP.NET Core enlaza la parte del formulario.
+        formulario.Add(parte, "file", nombreArchivo);
+
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, ruta) { Content = formulario };
+
+        if (tokenProvider.AccessToken is { } token)
+        {
+            peticion.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        using var respuesta = await http.SendAsync(peticion, ct);
+
+        if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            tokenProvider.CerrarSesion();
+            return ResultadoApi<T>.DeError("La sesión ha caducado.");
+        }
+
+        if (!respuesta.IsSuccessStatusCode)
+        {
+            // Este endpoint responde con texto plano en los errores de
+            // validación (BadRequest("...")), no con ProblemDetails, así que
+            // se muestra tal cual en vez de intentar deserializarlo.
+            var detalle = await respuesta.Content.ReadAsStringAsync(ct);
+            return ResultadoApi<T>.DeError(string.IsNullOrWhiteSpace(detalle)
+                ? $"El servidor respondió {(int)respuesta.StatusCode}."
+                : detalle);
+        }
+
+        var creado = await respuesta.Content.ReadFromJsonAsync<T>(cancellationToken: ct);
+        return creado is null
+            ? ResultadoApi<T>.DeError("El servidor no devolvió el documento creado.")
+            : ResultadoApi<T>.DeExito(creado);
+    }
+
+    /// <summary>Descarga un archivo de la Api. Devuelve null si no se pudo.</summary>
+    protected async Task<byte[]?> DescargarArchivoAsync(string ruta, CancellationToken ct)
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Get, ruta);
+
+        if (tokenProvider.AccessToken is { } token)
+        {
+            peticion.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        using var respuesta = await http.SendAsync(peticion, ct);
+
+        if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            tokenProvider.CerrarSesion();
+            return null;
+        }
+
+        return respuesta.IsSuccessStatusCode
+            ? await respuesta.Content.ReadAsByteArrayAsync(ct)
+            : null;
+    }
+
     private sealed record ProblemaValidacion(Dictionary<string, string[]> Errors);
 }
 

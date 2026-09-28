@@ -64,6 +64,53 @@ public static class DocumentosAdjuntosEndpoints
                 await db.DocumentosAdjuntos.OrderByDescending(d => d.FechaSubida).ToListAsync())
             .RequireAuthorization();
 
+        // Listado para la pantalla de OCR / Foliado. Se separa del listado
+        // plano de arriba porque añade dos datos que no están en la fila del
+        // documento y hay que calcular sobre sus fragmentos: cuántas páginas
+        // tiene y con qué confianza media se reconoció su texto. Va en una
+        // sola consulta agrupada, no una por documento.
+        //
+        // La ruta no choca con la de {id:guid} de abajo: "resumen" no es un
+        // GUID y la restricción de ruta lo descarta.
+        app.MapGet("/api/documentos-adjuntos/resumen", async (AppDbContext db, CancellationToken ct) =>
+            {
+                var porDocumento = await db.FragmentosDocumento
+                    .GroupBy(f => f.DocumentoAdjuntoId)
+                    .Select(g => new
+                    {
+                        DocumentoId = g.Key,
+                        Paginas = g.Select(f => f.Pagina).Distinct().Count(),
+                        ConfianzaMedia = g.Average(f => f.ConfianzaOcr)
+                    })
+                    .ToDictionaryAsync(x => x.DocumentoId, ct);
+
+                var documentos = await db.DocumentosAdjuntos
+                    .OrderByDescending(d => d.FechaSubida)
+                    .ToListAsync(ct);
+
+                return documentos.Select(d =>
+                {
+                    porDocumento.TryGetValue(d.Id, out var agregado);
+                    return new DocumentoResumenResponse(
+                        d.Id,
+                        d.ExpedienteId,
+                        d.NombreArchivo,
+                        d.ContentType,
+                        d.TamanoBytes,
+                        d.TipoDocumento,
+                        d.TipoDocumentoConfianza,
+                        d.FechaSubida,
+                        d.EstadoProcesamiento,
+                        d.MensajeError,
+                        d.FolioInicio,
+                        d.FolioFin,
+                        agregado?.Paginas,
+                        agregado?.ConfianzaMedia,
+                        d.RutaAlmacenamientoProcesado is not null);
+                });
+            })
+            .RequireAuthorization();
+
         app.MapGet("/api/documentos-adjuntos/{id:guid}", async (Guid id, AppDbContext db) =>
                 await db.DocumentosAdjuntos.FirstOrDefaultAsync(d => d.Id == id) is { } documento
                     ? Results.Ok(documento)
@@ -90,6 +137,30 @@ public static class DocumentosAdjuntosEndpoints
         // seleccionable cuando aplica, ver FoliadorService) para que el
         // usuario haga lo que quiera con él localmente.
         app.MapGet("/api/documentos-adjuntos/{id:guid}/descargar", async (Guid id, AppDbContext db, IDocumentStorage storage) =>
+            {
+                var documento = await db.DocumentosAdjuntos.FirstOrDefaultAsync(d => d.Id == id);
+                if (documento is null)
+                    return Results.NotFound();
+
+                // Por defecto se entrega el PDF procesado (sello de folio y
+                // capa de texto buscable), que es el que le sirve al
+                // abogado. El original se pide expresamente por la ruta de
+                // abajo: se conserva intacto, nunca se sobrescribe.
+                var ruta = documento.RutaAlmacenamientoProcesado ?? documento.RutaAlmacenamiento;
+                var nombre = documento.RutaAlmacenamientoProcesado is null
+                    ? documento.NombreArchivo
+                    : NombresDocumento.Procesado(documento.NombreArchivo);
+
+                var contenido = await storage.DescargarAsync(ruta);
+
+                return Results.File(contenido, documento.ContentType, nombre);
+            })
+            .RequireAuthorization();
+
+        // El escaneo tal y como lo subió el usuario, sin sello ni capa de
+        // texto. En un despacho puede ser la pieza con valor probatorio, así
+        // que tiene que poder recuperarse siempre.
+        app.MapGet("/api/documentos-adjuntos/{id:guid}/descargar/original", async (Guid id, AppDbContext db, IDocumentStorage storage) =>
             {
                 var documento = await db.DocumentosAdjuntos.FirstOrDefaultAsync(d => d.Id == id);
                 if (documento is null)
@@ -156,3 +227,38 @@ public record DocumentoAdjuntoUpdateRequest(
     string? TipoDocumento,
     EstadoProcesamientoDocumento? EstadoProcesamiento,
     DateTime? FechaProcesado);
+
+
+/// <summary>
+/// Un documento tal y como lo necesita la pantalla de OCR / Foliado:
+/// la fila del documento más lo que hay que calcular sobre sus fragmentos.
+/// Paginas y ConfianzaOcrMedia son null mientras no se ha procesado.
+/// </summary>
+public static class NombresDocumento
+{
+    /// <summary>"Demanda.pdf" -> "Demanda_procesado.pdf".</summary>
+    public static string Procesado(string nombreArchivo)
+    {
+        var punto = nombreArchivo.LastIndexOf('.');
+        return punto > 0
+            ? $"{nombreArchivo[..punto]}_procesado{nombreArchivo[punto..]}"
+            : $"{nombreArchivo}_procesado";
+    }
+}
+
+public record DocumentoResumenResponse(
+    Guid Id,
+    Guid ExpedienteId,
+    string NombreArchivo,
+    string ContentType,
+    long TamanoBytes,
+    string TipoDocumento,
+    double? TipoDocumentoConfianza,
+    DateTime FechaSubida,
+    EstadoProcesamientoDocumento EstadoProcesamiento,
+    string? MensajeError,
+    int? FolioInicio,
+    int? FolioFin,
+    int? Paginas,
+    double? ConfianzaOcrMedia,
+    bool TienePdfProcesado);

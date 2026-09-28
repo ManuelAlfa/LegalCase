@@ -16,7 +16,15 @@ public class DocumentoAdjunto : ITenantEntity
     public Guid TenantId { get; set; }
     public Guid ExpedienteId { get; set; }
     public string NombreArchivo { get; set; } = string.Empty;
+    // Clave del archivo TAL COMO LO SUBIÓ EL USUARIO. No se toca nunca
+    // después de subirlo: en un despacho el escaneo original puede ser la
+    // pieza con valor probatorio, así que el procesado no lo sobrescribe.
     public string RutaAlmacenamiento { get; set; } = string.Empty;
+
+    // Clave del PDF ya procesado (sello de folio + capa de texto buscable).
+    // Null mientras no se ha generado: documentos en cola, con error, o de
+    // un formato que todavía no se sella (ver DocumentoSubidoConsumer).
+    public string? RutaAlmacenamientoProcesado { get; set; }
     public string ContentType { get; set; } = string.Empty;
     public long TamanoBytes { get; set; }
     public string TipoDocumento { get; set; } = string.Empty;
