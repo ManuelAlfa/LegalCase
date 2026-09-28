@@ -312,60 +312,134 @@ def _deskew_y_limpiar(imagen_bgr: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(enderezada, cv2.COLOR_GRAY2BGR)
 
 
-def _detectar_columna(centros_x: np.ndarray, ancho_pagina: float) -> List[int]:
+def _detectar_columna(
+    polys: List[np.ndarray], centros_x: np.ndarray, x_izquierdo: float, x_derecho: float
+) -> List[int]:
     """Asigna cada caja de texto a la columna 0 (izquierda) o 1 (derecha).
 
     PaddleOCR no reconstruye columnas; solo devuelve cajas de texto. Muchos
     documentos oficiales (BOE, diligencias, ciertos formularios) usan
-    maquetación a dos columnas, así que se detecta el mayor "hueco"
-    horizontal vacío de texto y, si es suficientemente ancho y cae en la
-    franja central de la página, se trata como separador de columnas.
+    maquetación a dos columnas, y leerlos línea a línea cruzando de una a
+    otra produce un texto sin sentido.
+
+    Una separación de columnas es una franja vertical por la que NO pasa
+    ningún texto. Por eso se calcula sobre la OCUPACIÓN horizontal real de
+    las cajas (su intervalo x0-x1), no sobre sus centros: una línea corta
+    centrada tiene el centro a mitad de página, pero su texto ocupa esa
+    mitad, así que mirando centros se detectaban columnas donde solo había
+    líneas de distinta longitud (falso positivo comprobado 2026-09-28).
     """
+    ancho_pagina = x_derecho - x_izquierdo
     if ancho_pagina <= 0 or len(centros_x) < 2:
         return [0] * len(centros_x)
 
-    orden = np.argsort(centros_x)
-    xs_ordenados = centros_x[orden]
-    huecos = np.diff(xs_ordenados)
-    if len(huecos) == 0:
+    # Rejilla de ocupación de 200 casillas: suficiente para distinguir una
+    # calle entre columnas (que ocupa varios puntos porcentuales del ancho)
+    # y barata de calcular.
+    casillas = 200
+    ocupado = np.zeros(casillas, dtype=bool)
+    for poly in polys:
+        x0 = (poly[:, 0].min() - x_izquierdo) / ancho_pagina
+        x1 = (poly[:, 0].max() - x_izquierdo) / ancho_pagina
+        i0 = max(0, int(np.floor(x0 * casillas)))
+        i1 = min(casillas, int(np.ceil(x1 * casillas)))
+        ocupado[i0:i1] = True
+
+    # Mayor racha de casillas libres cuyo centro caiga en la franja central.
+    mejor_inicio = mejor_largo = 0
+    inicio = None
+    for i in range(casillas + 1):
+        libre = i < casillas and not ocupado[i]
+        if libre and inicio is None:
+            inicio = i
+        elif not libre and inicio is not None:
+            largo = i - inicio
+            centro_relativo = (inicio + i) / 2 / casillas
+            if largo > mejor_largo and 0.3 <= centro_relativo <= 0.7:
+                mejor_inicio, mejor_largo = inicio, largo
+            inicio = None
+
+    # Limitación conocida: si la página lleva un titular o una cabecera que
+    # cruza de lado a lado por encima de las dos columnas, esa franja aparece
+    # ocupada de punta a punta y no se detecta separación, así que el cuerpo
+    # se lee cruzando columnas. Resolverlo bien exige análisis de maquetación
+    # por bloques, no una sola calle vertical. Aun así esto es estrictamente
+    # mejor que antes, cuando la detección no se disparaba en ningún caso.
+    if mejor_largo < 0.05 * casillas:
         return [0] * len(centros_x)
 
-    idx_mayor_hueco = int(np.argmax(huecos))
-    posicion_relativa = (xs_ordenados[idx_mayor_hueco] - xs_ordenados[0]) / ancho_pagina
-
-    # Umbral deliberadamente conservador: un hueco pequeño o fuera del centro
-    # de la página es solo el espacio entre palabras de una línea corta, no
-    # un separador de columnas real.
-    if huecos[idx_mayor_hueco] < 0.08 * ancho_pagina or not (0.3 <= posicion_relativa <= 0.7):
-        return [0] * len(centros_x)
-
-    separador = (xs_ordenados[idx_mayor_hueco] + xs_ordenados[idx_mayor_hueco + 1]) / 2
+    separador = x_izquierdo + (mejor_inicio + mejor_largo / 2) / casillas * ancho_pagina
     return [0 if x < separador else 1 for x in centros_x]
+
+
+def _agrupar_en_lineas(
+    indices: List[int],
+    centros_y: np.ndarray,
+    y_tops: np.ndarray,
+    y_bottoms: np.ndarray,
+) -> List[List[int]]:
+    """Agrupa cajas que pertenecen a la misma línea de texto.
+
+    Se recorren las cajas de arriba abajo y cada una se añade a la línea en
+    curso si su centro vertical cae DENTRO de la banda que ocupa esa línea.
+    Es una comprobación de solapamiento real, no una división en rejilla:
+    aguanta que las cajas tengan alturas distintas (mayúsculas, tildes,
+    números) y que el escaneo esté ligeramente torcido, que es justo cuando
+    falla una rejilla fija.
+    """
+    lineas: List[List[int]] = []
+    banda_arriba = 0.0
+    banda_abajo = 0.0
+
+    for i in sorted(indices, key=lambda k: centros_y[k]):
+        if lineas and banda_arriba <= centros_y[i] <= banda_abajo:
+            lineas[-1].append(i)
+            # La banda crece con la caja añadida: una línea con una tilde
+            # alta o un número bajo sigue siendo la misma línea.
+            banda_arriba = min(banda_arriba, y_tops[i])
+            banda_abajo = max(banda_abajo, y_bottoms[i])
+        else:
+            lineas.append([i])
+            banda_arriba = float(y_tops[i])
+            banda_abajo = float(y_bottoms[i])
+
+    return lineas
 
 
 def _ordenar_por_lectura(polys: List[np.ndarray], textos: List[str]) -> List[str]:
     """Reordena las cajas detectadas a orden de lectura humano (columna,
     línea, izquierda-a-derecha) en vez del orden de detección del modelo,
     que no sigue ningún orden de lectura garantizado.
+
+    Antes esto agrupaba las líneas dividiendo su coordenada Y entre la altura
+    media y redondeando. Dos líneas consecutivas caían con frecuencia en el
+    mismo grupo —pasa constantemente en texto denso o con el escaneo algo
+    torcido— y entonces el desempate lo decidía la posición horizontal, así
+    que salían intercambiadas entre sí. Se veía en el texto guardado y, peor,
+    en la capa de texto del PDF: al seleccionar un párrafo se copiaban
+    palabras de la línea de al lado (detectado 2026-09-28 sobre la Gaceta).
     """
     if not textos:
         return []
 
     centros_x = np.array([poly[:, 0].mean() for poly in polys])
     y_tops = np.array([poly[:, 1].min() for poly in polys])
-    alturas = np.array([poly[:, 1].max() - poly[:, 1].min() for poly in polys])
-    altura_media = float(np.median(alturas)) if len(alturas) else 20.0
+    y_bottoms = np.array([poly[:, 1].max() for poly in polys])
+    centros_y = (y_tops + y_bottoms) / 2.0
 
-    ancho_pagina = float(centros_x.max() - centros_x.min()) if len(centros_x) > 1 else 0.0
-    columna_idx = _detectar_columna(centros_x, ancho_pagina)
+    x_izquierdo = float(min(poly[:, 0].min() for poly in polys))
+    x_derecho = float(max(poly[:, 0].max() for poly in polys))
+    columna_idx = _detectar_columna(polys, centros_x, x_izquierdo, x_derecho)
 
-    indices = list(range(len(textos)))
-    indices.sort(key=lambda i: (
-        columna_idx[i],
-        round(y_tops[i] / max(altura_media, 1.0)),  # agrupa por línea aproximada
-        centros_x[i],
-    ))
-    return [textos[i] for i in indices]
+    ordenados: List[int] = []
+    # Columna a columna: en maquetación a dos columnas se lee entera la
+    # izquierda antes de empezar la derecha, no línea a línea cruzando.
+    for columna in sorted(set(columna_idx)):
+        indices_columna = [i for i in range(len(textos)) if columna_idx[i] == columna]
+        for linea in _agrupar_en_lineas(indices_columna, centros_y, y_tops, y_bottoms):
+            ordenados.extend(sorted(linea, key=lambda i: centros_x[i]))
+
+    return [textos[i] for i in ordenados]
 
 
 def _extraer_texto_y_confianza(imagen_bgr: np.ndarray) -> Tuple[str, float]:
