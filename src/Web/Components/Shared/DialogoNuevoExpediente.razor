@@ -61,7 +61,20 @@
 
             <div class="cps-modal-fila">
                 <div class="cps-field">
-                    <label for="ne-cliente">Cliente</label>
+                    @* El alta de cliente va en la línea de la etiqueta, no
+                       debajo del desplegable: ahí abajo pasaba desapercibida
+                       (lo señaló Manuel). Arriba cae en el recorrido natural
+                       de la vista, que va a la etiqueta antes que al campo,
+                       y queda alineada con el borde de la columna.
+
+                       No se hace botón relleno a propósito: competiría con
+                       "Crear expediente", que es la acción principal. *@
+                    <div class="cps-field-cabecera">
+                        <label for="ne-cliente">Cliente</label>
+                        <button type="button" class="cps-enlace-alta" @onclick="AbrirAltaCliente">
+                            + Nuevo cliente
+                        </button>
+                    </div>
                     <select id="ne-cliente" @bind="_clienteId">
                         <option value="">— Selecciona un cliente —</option>
                         @foreach (var cliente in _clientes)
@@ -73,12 +86,6 @@
                     {
                         <span class="validation-message">@mensaje</span>
                     }
-                    @* Un caso nuevo es muy a menudo de un cliente nuevo.
-                       Obligar a salir del alta, ir a Clientes y volver a
-                       empezar sería perder lo ya escrito. *@
-                    <button type="button" class="cps-enlace-alta" @onclick="AbrirAltaCliente">
-                        + nuevo cliente
-                    </button>
                 </div>
 
                 <div class="cps-field">

@@ -433,16 +433,28 @@ body { font-family: var(--font-body); color: var(--mud-text-primary); -webkit-fo
 .cps-modal-fondo.cps-modal-anidado { z-index: 1300; }
 .cps-modal.cps-modal-anidado { z-index: 1301; width: min(520px, calc(100vw - 48px)); }
 
-/* Enlace de acción dentro de un formulario ("+ nuevo cliente"): es un
+/* Enlace de acción dentro de un formulario ("+ Nuevo cliente"): es un
    <button> por accesibilidad —dispara una acción, no navega— pero se ve
-   como un enlace para no competir con el botón principal del diálogo. */
-.cps-enlace-alta {
-  align-self: flex-start;
-  background: none; border: 0; padding: 0;
-  font: inherit; font-size: 12px; color: var(--mud-primary);
-  cursor: pointer; text-decoration: none;
+   como un enlace para no competir con el botón principal del diálogo.
+
+   Vive en la línea de la etiqueta del campo, alineado al borde derecho de
+   su columna. Debajo del desplegable costaba encontrarlo: quedaba fuera del
+   recorrido de la vista y con la tipografía pequeña de las ayudas. */
+.cps-field-cabecera {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
 }
-.cps-enlace-alta:hover { text-decoration: underline; }
+.cps-enlace-alta {
+  background: none; border: 0;
+  padding: 1px 6px; margin: -1px -6px 0 0;   /* el relleno no descuadra la alineación */
+  border-radius: 4px;
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 1.3;
+  color: var(--mud-primary);
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+/* Fondo al pasar por encima, no solo subrayado: deja claro que es pulsable
+   incluso antes de leerlo. */
+.cps-enlace-alta:hover { background: var(--mud-primary-lighten); }
+.cps-enlace-alta:focus-visible { outline: 2px solid var(--mud-primary); outline-offset: 1px; }
 
 /* ---------------------------------------------------------------------
    Pantalla de Documentos y OCR
