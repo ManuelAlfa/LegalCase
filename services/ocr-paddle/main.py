@@ -195,6 +195,45 @@ OCR_INTENTOS_POR_CHUNK = int(os.environ.get("OCR_INTENTOS_POR_CHUNK", "3"))
 # Inclinación máxima que el enderezado intenta corregir (ver _deskew_y_limpiar).
 OCR_ENDEREZADO_MAX_GRADOS = float(os.environ.get("OCR_ENDEREZADO_MAX_GRADOS", "10"))
 
+# Resolución a la que se rasteriza cada página PDF antes del OCR.
+#
+# Hasta 2026-09-29 era 300 DPI fijo para todo. Medido ese día con verdad de
+# referencia (texto digital del mismo documento): lo que decide la calidad no
+# es el DPI sino la ALTURA DEL RENGLÓN en píxeles, y el punto bueno está en
+# torno a 48 px — coincide con la altura de entrada del modelo de
+# reconocimiento. Con 300 DPI fijos:
+#   - un auto judicial en letra normal quedaba a ~75 px de renglón. Medido
+#     por el pipeline completo con verdad de referencia: 96,4% de fidelidad
+#     y 17,0 s/página a 300 DPI, frente a 99,2% y 10,4 s/página con el modo
+#     adaptativo (que elige 182 DPI para ese documento);
+#   - la Gaceta, de letra pequeña, necesita ~250 DPI para llegar a 48 px;
+#   - un escaneo de 96 DPI se ampliaba 9,8x en píxeles sin ganar nada;
+#   - por encima de ~4000 px de lado, PaddleOCR reduce la imagen él mismo,
+#     así que rasterizar más grande solo gasta tiempo.
+#
+# "adaptativo" (por defecto): cada página se rasteriza primero barata, se mide
+# la altura mediana de sus caracteres (milisegundos, sin modelo) y se elige el
+# DPI que deja el renglón en la altura objetivo. La relación entre altura de
+# caja del detector y altura de carácter se midió estable (2,6-3,2, media 2,8)
+# en tres documentos distintos: de ahí el objetivo de 17 px de carácter.
+# "fijo": comportamiento anterior, a OCR_DPI_FIJO. Sirve para volver atrás sin
+# tocar código si algún tipo de documento sale peor.
+OCR_DPI_MODO = os.environ.get("OCR_DPI_MODO", "adaptativo").strip().lower()
+OCR_DPI_FIJO = int(os.environ.get("OCR_DPI_FIJO", "300"))
+OCR_ALTURA_CARACTER_OBJETIVO = float(os.environ.get("OCR_ALTURA_CARACTER_OBJETIVO", "17"))
+# Por debajo de 150 la fidelidad cae (medido: ~89% a 100 DPI) aunque el
+# carácter parezca grande; por encima de 400 no se ha visto mejora y el coste
+# crece.
+OCR_DPI_MIN = int(os.environ.get("OCR_DPI_MIN", "150"))
+OCR_DPI_MAX = int(os.environ.get("OCR_DPI_MAX", "400"))
+# Lado máximo que acepta el detector de PaddleOCR sin reducir la imagen.
+OCR_LADO_MAX_PX = int(os.environ.get("OCR_LADO_MAX_PX", "4000"))
+_DPI_SONDEO = 150
+# Páginas donde no se encuentra nada con forma de letra (en blanco, o solo
+# una imagen): no hay renglón que medir, se usa la resolución que mejor salió
+# en letra normal.
+_DPI_SIN_TEXTO = 200
+
 _VARIANTES = {
     # PP-OCRv6 (paddleocr 3.7.0, ver requirements.txt) en vez de PP-OCRv5 —
     # soporta 46 idiomas latinos nativamente en un solo modelo, sin el
@@ -918,27 +957,73 @@ def _ejecutar_ocr_paginas(paginas_png: List[Tuple[int, bytes]]) -> List[dict]:
     return [resultados[i] for i in sorted(resultados)]
 
 
-def _renderizar_paginas_pdfium(args: Tuple[str, List[int], str, int]) -> None:
+def _altura_mediana_caracter(gris: np.ndarray) -> float:
+    """Altura mediana, en píxeles, de lo que tiene forma de letra en la página.
+
+    Componentes conexas sobre la imagen binarizada, descartando motas de ruido,
+    rayas, sellos e ilustraciones por tamaño y proporción. Tarda milisegundos y
+    no necesita ningún modelo. Devuelve 0 si no hay nada que parezca texto.
+    """
+    _, binaria = cv2.threshold(gris, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    _, _, stats, _ = cv2.connectedComponentsWithStats(binaria, connectivity=8)
+    alturas = stats[1:, cv2.CC_STAT_HEIGHT]
+    anchos = stats[1:, cv2.CC_STAT_WIDTH]
+    areas = stats[1:, cv2.CC_STAT_AREA]
+
+    candidatas = alturas >= 4
+    if not np.any(candidatas):
+        return 0.0
+    referencia = np.median(alturas[candidatas])
+    letras = candidatas & (areas >= 8) & (anchos <= 3 * alturas) & (alturas <= 8 * referencia)
+    return float(np.median(alturas[letras])) if np.any(letras) else 0.0
+
+
+def _dpi_para_pagina(pagina: "pdfium.PdfPage") -> int:
+    """Resolución a la que rasterizar esta página para que su renglón quede en
+    la altura que mejor lee el modelo (ver OCR_DPI_MODO)."""
+    ancho_pt, alto_pt = pagina.get_size()
+    lado_pulgadas = max(ancho_pt, alto_pt) / 72
+    # Más allá de este DPI la imagen supera el lado máximo del detector y
+    # PaddleOCR la reduce igualmente: rasterizar por encima es tiempo perdido.
+    dpi_tope = min(OCR_DPI_MAX, int(OCR_LADO_MAX_PX / lado_pulgadas)) if lado_pulgadas > 0 else OCR_DPI_MAX
+
+    sondeo = pagina.render(scale=_DPI_SONDEO / 72).to_pil().convert("L")
+    altura = _altura_mediana_caracter(np.array(sondeo))
+
+    objetivo = (_DPI_SONDEO * OCR_ALTURA_CARACTER_OBJETIVO / altura) if altura > 0 else _DPI_SIN_TEXTO
+    # El tope gana al mínimo: en una página enorme (un plano A3) es preferible
+    # quedarse en lo que el detector acepta que pedirle algo que va a reducir.
+    return int(round(min(dpi_tope, max(OCR_DPI_MIN, objetivo))))
+
+
+def _renderizar_paginas_pdfium(args: Tuple[str, List[int], str, Optional[int]]) -> List[Tuple[int, int]]:
     """Worker de proceso aparte: renderiza un subconjunto de páginas a PNG en
     disco. Cada proceso abre su propio PdfDocument (pypdfium2 no admite
     compartir un mismo documento entre procesos) leyendo del PDF ya escrito
     en disco (`ruta_pdf`), no de bytes serializados por IPC — evita
     duplicar el PDF completo (hasta ~1.5GB visto en pruebas reales) en la
     memoria de cada proceso hijo.
+
+    Con `dpi_fijo` a None, la resolución se decide página a página
+    (_dpi_para_pagina). Devuelve la resolución usada en cada página, para
+    dejarla en el log.
     """
-    ruta_pdf, indices, tmpdir, dpi = args
+    ruta_pdf, indices, tmpdir, dpi_fijo = args
     pdf = pdfium.PdfDocument(ruta_pdf)
-    escala = dpi / 72
+    usados: List[Tuple[int, int]] = []
     try:
         for i in indices:
             pagina = pdf[i]
             try:
-                bitmap = pagina.render(scale=escala)
+                dpi = dpi_fijo or _dpi_para_pagina(pagina)
+                bitmap = pagina.render(scale=dpi / 72)
                 bitmap.to_pil().save(os.path.join(tmpdir, f"pagina_{i:06d}.png"))
+                usados.append((i, dpi))
             finally:
                 pagina.close()
     finally:
         pdf.close()
+    return usados
 
 
 def _paginas_a_png(contenido: bytes, es_pdf: bool) -> List[bytes]:
@@ -981,11 +1066,21 @@ def _paginas_a_png(contenido: bytes, es_pdf: bool) -> List[bytes]:
         n_procesos = min(OCR_PROCESOS, n_paginas) or 1
         indices = list(range(n_paginas))
         lotes = [indices[i::n_procesos] for i in range(n_procesos)]
-        tareas = [(ruta_pdf, lote, tmpdir, 300) for lote in lotes if lote]
+        dpi_fijo = OCR_DPI_FIJO if OCR_DPI_MODO == "fijo" else None
+        tareas = [(ruta_pdf, lote, tmpdir, dpi_fijo) for lote in lotes if lote]
 
         ctx = multiprocessing.get_context("spawn")
         with ProcessPoolExecutor(max_workers=n_procesos, mp_context=ctx) as executor:
-            list(executor.map(_renderizar_paginas_pdfium, tareas))
+            usados = [x for lote in executor.map(_renderizar_paginas_pdfium, tareas) for x in lote]
+
+        # Deja constancia de qué resolución se usó: si un tipo de documento
+        # sale peor, es lo primero que hay que poder mirar.
+        dpis = sorted(d for _, d in usados)
+        if dpis:
+            logger.info(
+                "Rasterizado (%s): %d páginas, DPI mín %d / mediana %d / máx %d.",
+                OCR_DPI_MODO, len(dpis), dpis[0], dpis[len(dpis) // 2], dpis[-1],
+            )
 
         paginas_png = []
         for i in range(n_paginas):

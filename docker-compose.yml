@@ -256,6 +256,12 @@ services:
       # documento, la probabilidad de que le pase a al menos uno no es
       # despreciable. Un tercer intento reduce bastante esa probabilidad.
       OCR_INTENTOS_POR_CHUNK: "3"
+      # Resolución de rasterizado: "adaptativo" elige el DPI de cada página
+      # para que el renglón quede en la altura que mejor lee el modelo (ver
+      # OCR_DPI_MODO en main.py, con las mediciones que lo justifican).
+      # "fijo" vuelve al comportamiento anterior (300 DPI para todo) sin
+      # tocar código: OCR_DPI_MODO=fijo docker compose up -d ocr-paddle
+      OCR_DPI_MODO: "${OCR_DPI_MODO:-adaptativo}"
     deploy:
       resources:
         limits:
