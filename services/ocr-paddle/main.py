@@ -192,6 +192,9 @@ OCR_RECICLAR_CADA_N_PAGINAS = int(os.environ.get("OCR_RECICLAR_CADA_N_PAGINAS", 
 # recarga de modelo más en el caso ya raro de que haga falta.
 OCR_INTENTOS_POR_CHUNK = int(os.environ.get("OCR_INTENTOS_POR_CHUNK", "3"))
 
+# Inclinación máxima que el enderezado intenta corregir (ver _deskew_y_limpiar).
+OCR_ENDEREZADO_MAX_GRADOS = float(os.environ.get("OCR_ENDEREZADO_MAX_GRADOS", "10"))
+
 _VARIANTES = {
     # PP-OCRv6 (paddleocr 3.7.0, ver requirements.txt) en vez de PP-OCRv5 —
     # soporta 46 idiomas latinos nativamente en un solo modelo, sin el
@@ -289,14 +292,28 @@ def _deskew_y_limpiar(imagen_bgr: np.ndarray) -> np.ndarray:
     if coords is None:
         return cv2.cvtColor(gris, cv2.COLOR_GRAY2BGR)
 
+    # El ángulo del rectángulo mínimo se normaliza a (-45°, 45°]. Hace falta
+    # porque OpenCV cambió de convención en la 4.5.1: antes devolvía
+    # [-90°, 0°) y ahora (0°, 90°]. El código original estaba escrito para la
+    # antigua y, con OpenCV 4.10, fallaba de dos formas (medido 2026-09-29):
+    #   - una página perfectamente recta podía salir con 90° (en vez de 0°)
+    #     y se giraba casi un cuarto de vuelta; los renglones de arriba y de
+    #     abajo se salían del encuadre y se perdía ~1/4 del texto sin aviso.
+    #     Era la causa del "encabezado que no se detecta";
+    #   - en las páginas torcidas de verdad giraba en sentido contrario y
+    #     DOBLABA la inclinación (1,5° -> 3°, 4° -> 8°).
     angulo = cv2.minAreaRect(coords)[-1]
-    if angulo < -45:
-        angulo = -(90 + angulo)
-    else:
-        angulo = -angulo
+    if angulo > 45:
+        angulo -= 90
+    elif angulo <= -45:
+        angulo += 90
 
-    # Evita "corregir" páginas ya rectas por ruido de redondeo del ángulo.
-    if abs(angulo) < 0.5:
+    # Solo se corrigen inclinaciones de escaneo, que son de pocos grados.
+    # Un ángulo mayor no es un escaneo torcido sino una estimación falsa
+    # (sellos, escudos o marcas verticales en el margen desvían el
+    # rectángulo mínimo) o una página apaisada, que es otro problema: en
+    # ambos casos girar hace más daño que no tocarla.
+    if abs(angulo) < 0.5 or abs(angulo) > OCR_ENDEREZADO_MAX_GRADOS:
         return cv2.cvtColor(gris, cv2.COLOR_GRAY2BGR)
 
     alto, ancho = gris.shape[:2]
