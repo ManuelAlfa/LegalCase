@@ -195,6 +195,12 @@ OCR_INTENTOS_POR_CHUNK = int(os.environ.get("OCR_INTENTOS_POR_CHUNK", "3"))
 # Inclinación máxima que el enderezado intenta corregir (ver _deskew_y_limpiar).
 OCR_ENDEREZADO_MAX_GRADOS = float(os.environ.get("OCR_ENDEREZADO_MAX_GRADOS", "10"))
 
+# Texto vertical del margen ("USO OFICIAL" de los autos judiciales, sellos
+# laterales): confianza mínima de su relectura para conservarlo. Por debajo
+# se descarta en vez de dejar letras sueltas en el texto (ver
+# _separar_texto_vertical_del_margen).
+OCR_MARGEN_CONFIANZA_MINIMA = float(os.environ.get("OCR_MARGEN_CONFIANZA_MINIMA", "0.80"))
+
 # Resolución a la que se rasteriza cada página PDF antes del OCR.
 #
 # Hasta 2026-09-29 era 300 DPI fijo para todo. Medido ese día con verdad de
@@ -521,10 +527,117 @@ def _ordenar_por_lectura(polys: List[np.ndarray], textos: List[str]) -> List[str
     return [textos[i] for i in ordenados]
 
 
+def _separar_texto_vertical_del_margen(
+    polys: List[np.ndarray], textos: List[str]
+) -> Tuple[List[int], List[List[int]]]:
+    """Separa del cuerpo el texto escrito en vertical en el margen.
+
+    Los autos judiciales llevan "USO OFICIAL" en vertical en el margen
+    izquierdo, y hay sellos laterales parecidos. El detector no lee eso como
+    una línea: devuelve cajas sueltas, una por letra o grupo de letras
+    ("U", "S", "0", "OIAL"), que se colaban intercaladas entre los renglones
+    del cuerpo (visto el 2026-09-28/30 sobre un auto real).
+
+    Se reconocen por tres rasgos a la vez, medidos sobre ese auto:
+      - están FUERA del bloque de texto del cuerpo, en el margen;
+      - forman una PILA vertical: cajas alineadas en la misma vertical y
+        pegadas una debajo de otra;
+      - son al menos 3 cajas, o alguna es claramente más alta que ancha
+        (texto girado).
+    Una caja suelta en el margen que no forme pila (un número de apartado
+    colgado, por ejemplo) se queda en el cuerpo: no se toca lo que no se
+    puede distinguir con seguridad del contenido.
+
+    Devuelve los índices que siguen en el cuerpo y las pilas separadas.
+    """
+    n = len(textos)
+    if n == 0:
+        return [], []
+
+    x0s = np.array([p[:, 0].min() for p in polys])
+    x1s = np.array([p[:, 0].max() for p in polys])
+    y0s = np.array([p[:, 1].min() for p in polys])
+    y1s = np.array([p[:, 1].max() for p in polys])
+    anchos, altos = x1s - x0s, y1s - y0s
+    centros_x = (x0s + x1s) / 2
+    altura_mediana = float(np.median(altos)) or 1.0
+
+    # Bloque del cuerpo: se define con los renglones "de verdad" (bastante más
+    # anchos que altos y con algo de texto). Sin suficientes renglones así
+    # (una tabla, un formulario, una página casi vacía) no hay referencia
+    # fiable de dónde está el margen, y no se separa nada.
+    normales = [i for i in range(n) if anchos[i] > 2 * altos[i] and len(textos[i].strip()) >= 5]
+    if len(normales) < 5:
+        return list(range(n)), []
+    cuerpo_x0 = float(np.percentile(x0s[normales], 5))
+    cuerpo_x1 = float(np.percentile(x1s[normales], 95))
+    tolerancia = 0.5 * altura_mediana
+
+    en_margen = [i for i in range(n)
+                 if centros_x[i] < cuerpo_x0 - tolerancia or centros_x[i] > cuerpo_x1 + tolerancia]
+
+    pilas: List[List[int]] = []
+    for i in sorted(en_margen, key=lambda k: y0s[k]):
+        if pilas:
+            ultima = pilas[-1]
+            misma_vertical = abs(centros_x[i] - np.mean(centros_x[ultima])) < altura_mediana
+            pegada = y0s[i] - max(y1s[k] for k in ultima) < altura_mediana
+            if misma_vertical and pegada:
+                ultima.append(i)
+                continue
+        pilas.append([i])
+
+    verticales = [pila for pila in pilas
+                  if len(pila) >= 3 or any(altos[k] >= 2 * anchos[k] for k in pila)]
+    fuera = {k for pila in verticales for k in pila}
+    return [i for i in range(n) if i not in fuera], verticales
+
+
+def _releer_texto_vertical(imagen_bgr: np.ndarray, polys: List[np.ndarray]) -> Tuple[str, float]:
+    """Relee una pila de texto vertical como una línea normal: recorta la
+    franja que ocupa, la gira un cuarto de vuelta y la pasa otra vez por el
+    motor. Se prueban los dos sentidos de giro (el texto vertical puede
+    leerse de abajo arriba o de arriba abajo) y se queda el de más
+    confianza. Devuelve ("", 0.0) si no sale nada legible."""
+    x0 = min(p[:, 0].min() for p in polys)
+    x1 = max(p[:, 0].max() for p in polys)
+    y0 = min(p[:, 1].min() for p in polys)
+    y1 = max(p[:, 1].max() for p in polys)
+    margen = 0.5 * (x1 - x0)
+    alto_img, ancho_img = imagen_bgr.shape[:2]
+    recorte = imagen_bgr[
+        max(0, int(y0 - margen)):min(alto_img, int(y1 + margen)),
+        max(0, int(x0 - margen)):min(ancho_img, int(x1 + margen)),
+    ]
+    if recorte.size == 0:
+        return "", 0.0
+
+    mejor_texto, mejor_confianza = "", 0.0
+    for giro in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE):
+        # Sin corrección de documento: el recorte ya sale de la imagen
+        # corregida, y "desalabear" una franja de pocos píxeles de ancho la
+        # deformaría en vez de arreglarla.
+        resultado = _motor.predict(
+            cv2.rotate(recorte, giro),
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+        )
+        trozos = [(t, s) for r in resultado
+                  for t, s in zip(r.get("rec_texts", []), r.get("rec_scores", [])) if t and t.strip()]
+        if not trozos:
+            continue
+        texto = " ".join(t.strip() for t, _ in trozos)
+        confianza = float(np.mean([s for _, s in trozos]))
+        if confianza > mejor_confianza and len(texto.replace(" ", "")) >= 2:
+            mejor_texto, mejor_confianza = texto, confianza
+    return mejor_texto, mejor_confianza
+
+
 def _extraer_texto_y_confianza(imagen_bgr: np.ndarray) -> Tuple[str, float]:
     resultado = _motor.predict(imagen_bgr)
 
     lineas: List[str] = []
+    margenes: List[str] = []
     puntuaciones: List[float] = []
     for pagina_resultado in resultado:
         textos = pagina_resultado.get("rec_texts", [])
@@ -537,10 +650,35 @@ def _extraer_texto_y_confianza(imagen_bgr: np.ndarray) -> Tuple[str, float]:
 
         textos_filtrados = [t for t, _, _ in tripletas]
         polys_filtrados = [p for _, p, _ in tripletas]
-        puntuaciones.extend(s for _, _, s in tripletas)
-        lineas.extend(_ordenar_por_lectura(polys_filtrados, textos_filtrados))
+
+        cuerpo, pilas = _separar_texto_vertical_del_margen(polys_filtrados, textos_filtrados)
+        puntuaciones.extend(tripletas[i][2] for i in cuerpo)
+        lineas.extend(_ordenar_por_lectura(
+            [polys_filtrados[i] for i in cuerpo], [textos_filtrados[i] for i in cuerpo]))
+
+        # Las coordenadas de las cajas están sobre la imagen que el motor
+        # leyó de verdad, que NO es la que se le pasa: PaddleOCR la corrige
+        # antes por su cuenta (orientación del documento y "desalabeo"
+        # UVDoc, activos por defecto) y el desalabeo la deforma. Recortar de
+        # la original daba una franja en blanco.
+        imagen_leida = imagen_bgr
+        preprocesado = pagina_resultado.get("doc_preprocessor_res")
+        if preprocesado is not None and preprocesado.get("output_img") is not None:
+            imagen_leida = preprocesado["output_img"]
+
+        for pila in pilas:
+            texto_margen, confianza_margen = _releer_texto_vertical(
+                imagen_leida, [polys_filtrados[i] for i in pila])
+            if confianza_margen >= OCR_MARGEN_CONFIANZA_MINIMA:
+                margenes.append(texto_margen)
+                puntuaciones.append(confianza_margen)
 
     texto = "\n".join(lineas)
+    # El texto del margen va al final y en párrafo propio (línea en blanco):
+    # el fragmentador separa párrafos así, y queda como fragmento aparte en
+    # vez de pegado a un renglón del cuerpo con el que no tiene relación.
+    if margenes:
+        texto = texto + "\n\n" + "\n".join(margenes)
     # Página sin ninguna línea detectada: confianza 0.0 (no 1.0) a propósito,
     # para que dispare el reprocesado con la variante server en vez de darse
     # por buena en silencio — podría ser una página realmente en blanco o
