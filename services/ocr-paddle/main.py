@@ -278,11 +278,24 @@ _VARIANTES = {
 _motor: Optional[PaddleOCR] = None
 
 
+class LineaTexto(BaseModel):
+    """Un renglón y su caja en la página original, en fracciones (0-1) del
+    ancho y del alto, con origen arriba a la izquierda."""
+    texto: str
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
+
 class PaginaTexto(BaseModel):
     pagina: int
     texto: str
     confianza_ocr: float
     variante_ocr: str
+    # Vacío en páginas sin posiciones fiables (giradas por venir del revés).
+    # El foliador usa entonces su colocación aproximada.
+    lineas: List[LineaTexto] = []
 
 
 class OcrResponse(BaseModel):
@@ -333,6 +346,11 @@ def _inicializar_worker(variante: str) -> None:
 
 
 def _deskew_y_limpiar(imagen_bgr: np.ndarray) -> np.ndarray:
+    """Igual que _enderezar, sin el ángulo."""
+    return _enderezar(imagen_bgr)[0]
+
+
+def _enderezar(imagen_bgr: np.ndarray) -> Tuple[np.ndarray, float]:
     """Endereza páginas torcidas y reduce ruido antes de pasarlas al modelo.
 
     Sin este preprocesado, PaddleOCR pierde precisión notablemente en
@@ -350,7 +368,7 @@ def _deskew_y_limpiar(imagen_bgr: np.ndarray) -> np.ndarray:
     _, binaria = cv2.threshold(gris, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
     coords = cv2.findNonZero(binaria)
     if coords is None:
-        return cv2.cvtColor(gris, cv2.COLOR_GRAY2BGR)
+        return cv2.cvtColor(gris, cv2.COLOR_GRAY2BGR), 0.0
 
     # El ángulo del rectángulo mínimo se normaliza a (-45°, 45°]. Hace falta
     # porque OpenCV cambió de convención en la 4.5.1: antes devolvía
@@ -374,7 +392,7 @@ def _deskew_y_limpiar(imagen_bgr: np.ndarray) -> np.ndarray:
     # rectángulo mínimo) o una página apaisada, que es otro problema: en
     # ambos casos girar hace más daño que no tocarla.
     if abs(angulo) < 0.5 or abs(angulo) > OCR_ENDEREZADO_MAX_GRADOS:
-        return cv2.cvtColor(gris, cv2.COLOR_GRAY2BGR)
+        return cv2.cvtColor(gris, cv2.COLOR_GRAY2BGR), 0.0
 
     alto, ancho = gris.shape[:2]
     centro = (ancho // 2, alto // 2)
@@ -386,7 +404,9 @@ def _deskew_y_limpiar(imagen_bgr: np.ndarray) -> np.ndarray:
         flags=cv2.INTER_CUBIC,
         borderMode=cv2.BORDER_REPLICATE,
     )
-    return cv2.cvtColor(enderezada, cv2.COLOR_GRAY2BGR)
+    # Se devuelve también el ángulo aplicado: hace falta para devolver la
+    # posición de cada renglón sobre la página ORIGINAL (ver _ocr_una_pagina).
+    return cv2.cvtColor(enderezada, cv2.COLOR_GRAY2BGR), float(angulo)
 
 
 def _detectar_columna(
@@ -503,6 +523,11 @@ def _agrupar_en_lineas(
 
 
 def _ordenar_por_lectura(polys: List[np.ndarray], textos: List[str]) -> List[str]:
+    """Los textos en orden de lectura (ver _orden_de_lectura)."""
+    return [textos[i] for i in _orden_de_lectura(polys, textos)]
+
+
+def _orden_de_lectura(polys: List[np.ndarray], textos: List[str]) -> List[int]:
     """Reordena las cajas detectadas a orden de lectura humano (columna,
     línea, izquierda-a-derecha) en vez del orden de detección del modelo,
     que no sigue ningún orden de lectura garantizado.
@@ -539,7 +564,7 @@ def _ordenar_por_lectura(polys: List[np.ndarray], textos: List[str]) -> List[str
         ):
             ordenados.extend(sorted(linea, key=lambda i: centros_x[i]))
 
-    return [textos[i] for i in ordenados]
+    return ordenados
 
 
 def _separar_texto_vertical_del_margen(
@@ -648,8 +673,20 @@ def _releer_texto_vertical(imagen_bgr: np.ndarray, polys: List[np.ndarray]) -> T
     return mejor_texto, mejor_confianza
 
 
-def _extraer_texto_y_confianza(imagen_bgr: np.ndarray) -> Tuple[str, float]:
+def _extraer_texto_y_confianza(
+    imagen_bgr: np.ndarray,
+) -> Tuple[str, float, List[Tuple[str, np.ndarray]]]:
+    """Texto de la página en orden de lectura, su confianza media y los
+    renglones del cuerpo con su caja, en coordenadas de `imagen_bgr`.
+
+    Los renglones con caja sirven para colocar la capa de texto del PDF
+    encima de cada renglón. Si PaddleOCR ha tenido que girar la página por
+    venir del revés, esa lista va vacía: las cajas estarían en el marco de
+    la imagen girada, y es preferible que el foliador use su colocación
+    aproximada a que ponga el texto en un sitio equivocado.
+    """
     resultado = _motor.predict(imagen_bgr)
+    renglones_con_caja: List[Tuple[str, np.ndarray]] = []
 
     lineas: List[str] = []
     margenes: List[str] = []
@@ -668,8 +705,15 @@ def _extraer_texto_y_confianza(imagen_bgr: np.ndarray) -> Tuple[str, float]:
 
         cuerpo, pilas = _separar_texto_vertical_del_margen(polys_filtrados, textos_filtrados)
         puntuaciones.extend(tripletas[i][2] for i in cuerpo)
-        lineas.extend(_ordenar_por_lectura(
-            [polys_filtrados[i] for i in cuerpo], [textos_filtrados[i] for i in cuerpo]))
+        orden = _orden_de_lectura(
+            [polys_filtrados[i] for i in cuerpo], [textos_filtrados[i] for i in cuerpo])
+        lineas.extend(textos_filtrados[cuerpo[k]] for k in orden)
+
+        preprocesado = pagina_resultado.get("doc_preprocessor_res")
+        girada = preprocesado is not None and (preprocesado.get("angle") or 0) != 0
+        if not girada:
+            renglones_con_caja.extend(
+                (textos_filtrados[cuerpo[k]], polys_filtrados[cuerpo[k]]) for k in orden)
 
         # Las coordenadas de las cajas están sobre la imagen que el motor
         # leyó de verdad, que NO es la que se le pasa: PaddleOCR la corrige
@@ -677,7 +721,6 @@ def _extraer_texto_y_confianza(imagen_bgr: np.ndarray) -> Tuple[str, float]:
         # UVDoc, activos por defecto) y el desalabeo la deforma. Recortar de
         # la original daba una franja en blanco.
         imagen_leida = imagen_bgr
-        preprocesado = pagina_resultado.get("doc_preprocessor_res")
         if preprocesado is not None and preprocesado.get("output_img") is not None:
             imagen_leida = preprocesado["output_img"]
 
@@ -699,7 +742,7 @@ def _extraer_texto_y_confianza(imagen_bgr: np.ndarray) -> Tuple[str, float]:
     # por buena en silencio — podría ser una página realmente en blanco o
     # podría ser que la variante mobile no encontró nada por mala calidad.
     confianza = float(np.mean(puntuaciones)) if puntuaciones else 0.0
-    return texto, confianza
+    return texto, confianza, renglones_con_caja
 
 
 def _ocr_una_pagina(indice: int, imagen_png: bytes, variante: str) -> dict:
@@ -719,11 +762,57 @@ def _ocr_una_pagina(indice: int, imagen_png: bytes, variante: str) -> dict:
     corresponde al worker que la llama, sea cual sea.
     """
     imagen_bgr = cv2.imdecode(np.frombuffer(imagen_png, dtype=np.uint8), cv2.IMREAD_COLOR)
-    preprocesada = _deskew_y_limpiar(imagen_bgr)
-    texto, confianza = _extraer_texto_y_confianza(preprocesada)
+    preprocesada, angulo = _enderezar(imagen_bgr)
+    texto, confianza, renglones = _extraer_texto_y_confianza(preprocesada)
+    alto, ancho = imagen_bgr.shape[:2]
 
     logger.info("Página %d procesada (%s, confianza=%.3f, %d caracteres)", indice, variante, confianza, len(texto))
-    return {"pagina": indice, "texto": texto, "confianza_ocr": confianza, "variante_ocr": variante}
+    return {
+        "pagina": indice,
+        "texto": texto,
+        "confianza_ocr": confianza,
+        "variante_ocr": variante,
+        "lineas": _renglones_en_pagina_original(renglones, angulo, ancho, alto),
+    }
+
+
+def _renglones_en_pagina_original(
+    renglones: List[Tuple[str, np.ndarray]], angulo: float, ancho: int, alto: int
+) -> List[dict]:
+    """Pasa cada renglón a coordenadas de la página ORIGINAL, relativas (0-1).
+
+    Las cajas salen sobre la imagen enderezada; la capa de texto se dibuja
+    sobre el PDF original, que conserva la inclinación del escaneo. Se deshace
+    el giro del enderezado y se expresa la caja como fracción del ancho y del
+    alto, para que el foliador la lleve a puntos PDF sin necesitar saber a
+    qué resolución se rasterizó la página (que ahora varía por página, ver
+    OCR_DPI_MODO).
+    """
+    if not renglones or ancho <= 0 or alto <= 0:
+        return []
+
+    inversa = None
+    if angulo:
+        # Misma matriz que aplicó _enderezar (giro alrededor del centro), y su
+        # inversa para volver de la imagen enderezada a la original.
+        directa = cv2.getRotationMatrix2D((ancho // 2, alto // 2), angulo, 1.0)
+        inversa = cv2.invertAffineTransform(directa)
+
+    salida = []
+    for texto, poly in renglones:
+        puntos = np.asarray(poly, dtype=np.float64)
+        if inversa is not None:
+            puntos = puntos @ inversa[:, :2].T + inversa[:, 2]
+        x0, y0 = puntos.min(axis=0)
+        x1, y1 = puntos.max(axis=0)
+        salida.append({
+            "texto": texto,
+            "x0": float(np.clip(x0 / ancho, 0, 1)),
+            "y0": float(np.clip(y0 / alto, 0, 1)),
+            "x1": float(np.clip(x1 / ancho, 0, 1)),
+            "y1": float(np.clip(y1 / alto, 0, 1)),
+        })
+    return salida
 
 
 # Dos pools independientes, uno por variante (ver OCR_PROCESOS_SERVER para

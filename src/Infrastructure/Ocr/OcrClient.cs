@@ -48,9 +48,22 @@ public class OcrClient : IOcrClient
         var payload = await response.Content.ReadFromJsonAsync<OcrResponsePayload>(JsonOptions, cancellationToken)
             ?? throw new InvalidOperationException("El microservicio de OCR devolvió una respuesta vacía.");
 
-        return payload.Paginas.Select(p => new PaginaTexto(p.Pagina, p.Texto, p.ConfianzaOcr)).ToList();
+        return payload.Paginas
+            .Select(p => new PaginaTexto(
+                p.Pagina,
+                p.Texto,
+                p.ConfianzaOcr,
+                (p.Lineas ?? []).Select(l => new LineaTexto(l.Texto, l.X0, l.Y0, l.X1, l.Y1)).ToList()))
+            .ToList();
     }
 
     private record OcrResponsePayload(List<OcrPaginaPayload> Paginas);
-    private record OcrPaginaPayload(int Pagina, string Texto, double ConfianzaOcr, string VarianteOcr);
+
+    // Lineas puede faltar si responde una versión del servicio anterior a
+    // que existiera: se trata como "sin posiciones" y el foliador usa su
+    // colocación aproximada.
+    private record OcrPaginaPayload(
+        int Pagina, string Texto, double ConfianzaOcr, string VarianteOcr, List<OcrLineaPayload>? Lineas);
+
+    private record OcrLineaPayload(string Texto, double X0, double Y0, double X1, double Y1);
 }

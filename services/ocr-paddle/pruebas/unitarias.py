@@ -202,6 +202,30 @@ for grados in (0, 1.5, -1.5, 4, -4):
 
 
 # ---------------------------------------------------------------------------
+print("Posición de los renglones en la página original (capa de texto del PDF)")
+
+# Un renglón conocido en la página original se lleva a la imagen enderezada
+# con la misma matriz que usa _enderezar; la función tiene que devolverlo a
+# su sitio. Un signo cambiado dejaría la capa de texto desplazada al revés.
+ancho, alto = 1400, 2000
+original = np.array([[200, 600], [1200, 600], [1200, 650], [200, 650]], dtype=float)
+for grados in (0.0, 2.0, -3.5):
+    if grados:
+        m = cv2.getRotationMatrix2D((ancho // 2, alto // 2), grados, 1.0)
+        enderezado = original @ m[:, :2].T + m[:, 2]
+    else:
+        enderezado = original
+    r = main._renglones_en_pagina_original([("texto", enderezado)], grados, ancho, alto)[0]
+    esperado = (200 / ancho, 600 / alto, 1200 / ancho, 650 / alto)
+    obtenido = (r["x0"], r["y0"], r["x1"], r["y1"])
+    comprobar(f"renglón vuelve a su sitio tras enderezar {grados:+.1f}°",
+              np.allclose(obtenido, esperado, atol=0.002), f"{obtenido} en vez de {esperado}")
+
+r = main._renglones_en_pagina_original([("x", np.array([[-50, -50], [100, -50], [100, 30], [-50, 30]]))], 0, ancho, alto)[0]
+comprobar("coordenadas acotadas a la página", min(r["x0"], r["y0"]) >= 0 and max(r["x1"], r["y1"]) <= 1)
+
+
+# ---------------------------------------------------------------------------
 print("Altura de carácter (resolución adaptativa)")
 alto_letra = main._altura_mediana_caracter(recta)
 comprobar("mide una altura de letra plausible", 15 <= alto_letra <= 40, f"{alto_letra:.0f}px")

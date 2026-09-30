@@ -3,7 +3,6 @@ using LegalCaseManagement.Infrastructure.Documents;
 using PdfSharp.Drawing;
 using PdfSharp.Fonts;
 using PdfSharp.Pdf;
-using PdfSharp.Pdf.Content;
 using PdfSharp.Pdf.IO;
 
 namespace LegalCaseManagement.Infrastructure.Foliado;
@@ -72,7 +71,7 @@ public class FoliadorService : IFoliadorService
                 bool tieneTextoOculto;
                 using (var graficosOculto = XGraphics.FromPdfPage(pagina))
                 {
-                    tieneTextoOculto = EscribirCapaDeTextoOculta(graficosOculto, pagina, paginaTexto.Texto);
+                    tieneTextoOculto = EscribirCapaDeTextoOculta(graficosOculto, pagina, paginaTexto);
                 }
 
                 // Debe ejecutarse DESPUÉS de cerrar/disponer graficosOculto:
@@ -92,14 +91,69 @@ public class FoliadorService : IFoliadorService
         return streamSalida.ToArray();
     }
 
-    // No hay coordenadas de línea/palabra disponibles desde el microservicio
-    // de OCR (rec_polys se usa solo internamente para ordenar por lectura y
-    // se descarta antes de responder — ver memoria de proyecto
-    // "pdf-texto-buscable-pendiente"). Como aproximación razonable para una
-    // primera versión, se reparten las líneas de forma uniforme en la altura
-    // de la página: no reproduce la posición exacta de cada línea, pero deja
-    // el texto completo seleccionable y en el orden de lectura correcto.
-    private static bool EscribirCapaDeTextoOculta(XGraphics graficos, PdfPage pagina, string texto)
+    // Capa de texto invisible: el texto del OCR dibujado sobre el escaneo
+    // para que el PDF se pueda buscar, seleccionar y copiar.
+    private static bool EscribirCapaDeTextoOculta(XGraphics graficos, PdfPage pagina, PaginaTexto paginaTexto)
+    {
+        return paginaTexto.Lineas is { Count: > 0 } lineas
+            ? EscribirRenglonesEnSuSitio(graficos, pagina, lineas)
+            : EscribirRenglonesRepartidos(graficos, pagina, paginaTexto.Texto);
+    }
+
+    // Cada renglón se dibuja encima de su imagen, en la caja que da el OCR
+    // (fracciones de la página original), con el tamaño de letra que hace que
+    // ocupe exactamente el ancho de su caja. Así, al seleccionar en Acrobat,
+    // la selección cae sobre el renglón que se ve y se copia entero.
+    //
+    // Antes de 2026-09-30 el OCR no daba posiciones y todos los renglones se
+    // repartían uniformemente por la página con letra de 10 puntos: la
+    // selección no coincidía con lo que se veía, y en páginas estrechas (la
+    // Gaceta, 302 puntos de ancho) los renglones se salían por la derecha y
+    // al copiar faltaba el final de cada uno.
+    private static bool EscribirRenglonesEnSuSitio(XGraphics graficos, PdfPage pagina, IReadOnlyList<LineaTexto> lineas)
+    {
+        var anchoPagina = pagina.Width.Point;
+        var altoPagina = pagina.Height.Point;
+        var dibujadas = 0;
+
+        foreach (var linea in lineas)
+        {
+            var texto = linea.Texto.Trim();
+            var ancho = (linea.X1 - linea.X0) * anchoPagina;
+            var alto = (linea.Y1 - linea.Y0) * altoPagina;
+            if (texto.Length == 0 || ancho < 1 || alto < 1)
+            {
+                continue;
+            }
+
+            // El ancho del texto crece en proporción al tamaño de letra: se
+            // mide una vez a 10 puntos y se escala para llenar la caja. Se
+            // limita a la altura de la caja para que un renglón muy corto en
+            // una caja ancha (un "- 1 -" centrado) no salga con letra enorme.
+            var anchoA10 = graficos.MeasureString(texto, FuenteTextoOculto).Width;
+            if (anchoA10 <= 0)
+            {
+                continue;
+            }
+            var tamano = Math.Clamp(10 * ancho / anchoA10, 1, alto);
+            var fuente = new XFont("DejaVu Sans", tamano, XFontStyleEx.Regular);
+
+            // Centrado en vertical dentro de la caja.
+            var y = linea.Y0 * altoPagina + (alto - tamano) / 2;
+            graficos.DrawString(texto, fuente, BrochaInvisible, new XPoint(linea.X0 * anchoPagina, y), XStringFormats.TopLeft);
+            dibujadas++;
+        }
+
+        return dibujadas > 0;
+    }
+
+    // Sin posiciones (página girada por venir del revés, o respuesta de una
+    // versión del servicio de OCR anterior a que las diera): los renglones se
+    // reparten uniformemente en la altura de la página. No coincide con la
+    // imagen, pero deja el texto completo seleccionable y en orden. La letra
+    // se reduce lo necesario para que quepa el renglón más largo: antes era
+    // de 10 puntos fijos y en páginas estrechas se cortaba por la derecha.
+    private static bool EscribirRenglonesRepartidos(XGraphics graficos, PdfPage pagina, string texto)
     {
         var lineas = texto.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         if (lineas.Length == 0) return false;
@@ -108,12 +162,18 @@ public class FoliadorService : IFoliadorService
         const double margenInferior = 40;
         const double margenIzquierdo = 40;
         var alturaUtil = pagina.Height.Point - margenSuperior - margenInferior;
+        var anchoUtil = pagina.Width.Point - 2 * margenIzquierdo;
         var espaciado = lineas.Length > 1 ? alturaUtil / (lineas.Length - 1) : 0;
+
+        var anchoMaximo = lineas.Max(l => graficos.MeasureString(l, FuenteTextoOculto).Width);
+        var fuente = anchoMaximo > anchoUtil && anchoUtil > 0
+            ? new XFont("DejaVu Sans", 10 * anchoUtil / anchoMaximo, XFontStyleEx.Regular)
+            : FuenteTextoOculto;
 
         for (var j = 0; j < lineas.Length; j++)
         {
             var y = lineas.Length > 1 ? margenSuperior + j * espaciado : margenSuperior + alturaUtil / 2;
-            graficos.DrawString(lineas[j], FuenteTextoOculto, BrochaInvisible, new XPoint(margenIzquierdo, y));
+            graficos.DrawString(lineas[j], fuente, BrochaInvisible, new XPoint(margenIzquierdo, y));
         }
 
         return true;
@@ -151,36 +211,59 @@ public class FoliadorService : IFoliadorService
     // decide o no crear un ExtGState.
     private static void ForzarModoTextoInvisible(PdfPage pagina)
     {
-        var contenido = pagina.Contents.CreateSingleContent();
-        if (contenido.Stream is null)
+        // La capa oculta es el ÚLTIMO elemento del array /Contents de la
+        // página: se dibuja en su propia sesión de XGraphics, que añade su
+        // propio flujo de contenido al final (ver EstamparFolios). Se parchea
+        // solo ese flujo, y en TODOS sus bloques de texto.
+        //
+        // Antes se insertaba "3 Tr" solo tras el último "BT" de la página
+        // entera. Bastaba porque todos los renglones iban en un único bloque
+        // de texto. Ahora cada renglón lleva su tamaño de letra y su posición,
+        // y no se puede depender de que PdfSharp los agrupe en un solo
+        // bloque: si los partiera, los que quedaran sin "3 Tr" se verían
+        // pintados en negro en PDF antiguos (versión 1.3), que es justo el
+        // fallo crítico corregido el 2026-09-05.
+        var elementos = pagina.Contents.Elements;
+        if (elementos.Count == 0 || elementos.GetObject(elementos.Count - 1) is not PdfDictionary capaOculta
+            || capaOculta.Stream is null)
         {
             throw new InvalidOperationException(
-                "No se pudo generar el content stream de la página al forzar el modo de texto invisible.");
-        }
-
-        // Latin1 (ISO-8859-1) hace un roundtrip byte a byte sin pérdidas:
-        // necesario porque el content stream es binario (incluye la imagen
-        // escaneada), no texto Unicode.
-        var textoContenido = Encoding.Latin1.GetString(contenido.Stream.Value);
-
-        const string marcadorBt = "BT\n";
-        var posicion = textoContenido.LastIndexOf(marcadorBt, StringComparison.Ordinal);
-        if (posicion < 0)
-        {
-            // No debería pasar nunca: este método solo se llama si
-            // EscribirCapaDeTextoOculta devolvió true (ver EstamparFolios),
-            // que a su vez solo dibuja si hay al menos una línea de texto —
-            // eso siempre implica un "BT". Fallar alto en vez de continuar
-            // en silencio: preferible marcar el documento como Error (el
-            // catch de DocumentoSubidoConsumer ya lo hace) que producir un
-            // PDF con texto visible sin que nadie se entere.
-            throw new InvalidOperationException(
-                "No se encontró un operador BT en el content stream al forzar el modo de texto invisible; " +
+                "No se encontró el flujo de contenido de la capa de texto oculta; " +
                 "el texto oculto podría quedar visible en la página.");
         }
 
-        var textoParcheado = textoContenido.Insert(posicion + marcadorBt.Length, "3 Tr\n");
-        var secuencia = ContentReader.ReadContent(Encoding.Latin1.GetBytes(textoParcheado));
-        pagina.Contents.ReplaceContent(secuencia);
+        // Por si PdfSharp lo hubiera comprimido ya: se trabaja sobre el
+        // contenido sin filtros.
+        capaOculta.Stream.TryUncompress();
+
+        // Latin1 (ISO-8859-1) hace un roundtrip byte a byte sin pérdidas.
+        var contenido = Encoding.Latin1.GetString(capaOculta.Stream.Value);
+
+        const string marcadorBt = "BT\n";
+        var bloques = 0;
+        var parcheado = new StringBuilder(contenido.Length + 64);
+        var desde = 0;
+        int posicion;
+        while ((posicion = contenido.IndexOf(marcadorBt, desde, StringComparison.Ordinal)) >= 0)
+        {
+            parcheado.Append(contenido, desde, posicion + marcadorBt.Length - desde).Append("3 Tr\n");
+            desde = posicion + marcadorBt.Length;
+            bloques++;
+        }
+        parcheado.Append(contenido, desde, contenido.Length - desde);
+
+        if (bloques == 0)
+        {
+            // No debería pasar nunca: solo se llama si se dibujó al menos un
+            // renglón, y eso siempre produce un "BT". Fallar alto en vez de
+            // seguir en silencio: mejor marcar el documento como Error (el
+            // catch de DocumentoSubidoConsumer ya lo hace) que producir un PDF
+            // con texto visible sin que nadie se entere.
+            throw new InvalidOperationException(
+                "No se encontró ningún operador BT en la capa de texto oculta; " +
+                "el texto oculto podría quedar visible en la página.");
+        }
+
+        capaOculta.Stream.Value = Encoding.Latin1.GetBytes(parcheado.ToString());
     }
 }
