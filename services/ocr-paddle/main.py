@@ -582,8 +582,10 @@ def _separar_texto_vertical_del_margen(
       - están FUERA del bloque de texto del cuerpo, en el margen;
       - forman una PILA vertical: cajas alineadas en la misma vertical y
         pegadas una debajo de otra;
-      - son al menos 3 cajas, o alguna es claramente más alta que ancha
-        (texto girado).
+      - son texto girado: alguna caja es claramente más alta que ancha con
+        varios caracteres, o son al menos 3 cajas y la mayoría con letras.
+    Una columna de solo cifras (números de página de un índice, importes)
+    NO se separa aunque cumpla los dos primeros rasgos: es contenido.
     Una caja suelta en el margen que no forme pila (un número de apartado
     colgado, por ejemplo) se queda en el cuerpo: no se toca lo que no se
     puede distinguir con seguridad del contenido.
@@ -627,8 +629,24 @@ def _separar_texto_vertical_del_margen(
                 continue
         pilas.append([i])
 
+    # Qué hay escrito en la pila, además de dónde está. Una columna de cifras
+    # alineada a la derecha (los números de página de un índice, los
+    # importes de una factura) también queda fuera del cuerpo y apilada en
+    # vertical, pero es contenido: cada cifra va con su renglón. Hasta el
+    # 2026-09-30 se separaba igual que "USO OFICIAL", y en un índice del BOE
+    # los números de página se arrancaban de su entrada y quedaban como un
+    # párrafo de cifras repetidas y desordenadas.
+    def tiene_letras(k: int) -> bool:
+        return any(c.isalpha() for c in textos[k])
+
+    def texto_girado(k: int) -> bool:
+        # Más alta que ancha con al menos dos caracteres: horizontal no puede
+        # ser. Un solo carácter ("1", "l") es alto y estrecho sin estar girado.
+        return altos[k] >= 2 * anchos[k] and len(textos[k].strip()) >= 2
+
     verticales = [pila for pila in pilas
-                  if len(pila) >= 3 or any(altos[k] >= 2 * anchos[k] for k in pila)]
+                  if any(texto_girado(k) for k in pila)
+                  or (len(pila) >= 3 and sum(tiene_letras(k) for k in pila) * 2 > len(pila))]
     fuera = {k for pila in verticales for k in pila}
     return [i for i in range(n) if i not in fuera], verticales
 

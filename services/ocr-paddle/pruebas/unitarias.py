@@ -134,6 +134,23 @@ comprobar("el número colgado se queda en el cuerpo", textos.index("1.") in cuer
 comprobar("ningún renglón del cuerpo se separa",
           all(i in cuerpo for i, t in enumerate(textos) if t.startswith("renglon")))
 
+# Índice del BOE: una columna de números de página alineada a la derecha,
+# fuera del cuerpo y apilada en vertical, uno por renglón. Es contenido y se
+# queda en el cuerpo (fallaba el 2026-09-30: se arrancaban de su entrada).
+# Incluye un "1" suelto, alto y estrecho, que no debe contar como texto girado.
+polys, textos = [], []
+numeros = ["12", "12", "14", "15", "15", "16", "1", "17", "20", "20", "22", "23"]
+for n, num in enumerate(numeros):
+    y = 200 + n * 55
+    polys.append(caja(150, y, 1250, y + 40))
+    textos.append(f"CAPITULO {n}. De las cosas del indice numero {n}")
+    ancho_num = 12 if num == "1" else 30
+    polys.append(caja(1400, y - 6, 1400 + ancho_num, y + 34))
+    textos.append(num)
+cuerpo, pilas = main._separar_texto_vertical_del_margen(polys, textos)
+separados = [textos[i] for p in pilas for i in p]
+comprobar("columna de números de un índice se queda en el cuerpo", separados == [], str(separados))
+
 # Sin renglones suficientes para saber dónde está el cuerpo (una tabla, un
 # formulario) no se separa nada.
 pocos = polys[:3] + [p for _, p in pila]
