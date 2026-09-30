@@ -262,6 +262,12 @@ services:
       # "fijo" vuelve al comportamiento anterior (300 DPI para todo) sin
       # tocar código: OCR_DPI_MODO=fijo docker compose up -d ocr-paddle
       OCR_DPI_MODO: "${OCR_DPI_MODO:-adaptativo}"
+      # "Desalabeo" de PaddleOCR (UVDoc): desactivado. Está pensado para
+      # fotos de páginas curvadas; en escaneos no mejora la lectura, cuesta
+      # ~16% de tiempo y deforma la página hasta impedir colocar la capa de
+      # texto del PDF sobre cada renglón (ver OCR_DESALABEO en main.py).
+      # Activarlo solo si se procesan fotos de móvil de páginas dobladas.
+      OCR_DESALABEO: "${OCR_DESALABEO:-false}"
     deploy:
       resources:
         limits:

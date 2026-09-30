@@ -201,6 +201,16 @@ OCR_ENDEREZADO_MAX_GRADOS = float(os.environ.get("OCR_ENDEREZADO_MAX_GRADOS", "1
 # _separar_texto_vertical_del_margen).
 OCR_MARGEN_CONFIANZA_MINIMA = float(os.environ.get("OCR_MARGEN_CONFIANZA_MINIMA", "0.80"))
 
+# "Desalabeo" de PaddleOCR (modelo UVDoc): endereza fotos de páginas curvadas.
+# En paddleocr 3.x viene ACTIVADO por defecto, y estuvo en marcha sin
+# pedirlo hasta el 2026-09-30. Medido ese día sobre 10 páginas escaneadas
+# con verdad de referencia: sin él la fidelidad media sube (95,9% -> 96,9%)
+# y el tiempo baja un 16%. Además deforma los escaneos planos (desplaza los
+# renglones hasta 3 alturas de línea), lo que impedía colocar la capa de
+# texto del PDF encima de cada renglón. Se deja configurable por si se
+# procesan fotos de móvil de páginas dobladas, que es para lo que existe.
+OCR_DESALABEO = os.environ.get("OCR_DESALABEO", "false").strip().lower() in ("1", "true", "yes")
+
 # Resolución a la que se rasteriza cada página PDF antes del OCR.
 #
 # Hasta 2026-09-29 era 300 DPI fijo para todo. Medido ese día con verdad de
@@ -295,6 +305,11 @@ def _inicializar_worker(variante: str) -> None:
     modelo_det, modelo_rec = _VARIANTES[variante]
     _motor = PaddleOCR(
         use_textline_orientation=True,
+        # Explícitos, no por defecto (ver OCR_DESALABEO): la orientación del
+        # documento corrige páginas escaneadas del revés y casi no cuesta; el
+        # desalabeo está pensado para fotos y deforma los escaneos.
+        use_doc_orientation_classify=True,
+        use_doc_unwarping=OCR_DESALABEO,
         # SIN lang="es": con paddleocr==3.0.0, fijar `lang` junto con un
         # text_detection_model_name/text_recognition_model_name
         # explícito hace que PaddleX ignore en silencio el modelo pedido
