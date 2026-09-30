@@ -268,6 +268,11 @@ services:
       # texto del PDF sobre cada renglón (ver OCR_DESALABEO en main.py).
       # Activarlo solo si se procesan fotos de móvil de páginas dobladas.
       OCR_DESALABEO: "${OCR_DESALABEO:-false}"
+      # Giro de renglones boca abajo de PaddleOCR: desactivado. En escaneos
+      # volteaba renglones rectos y los leía del revés (ver
+      # OCR_ORIENTACION_RENGLON en main.py). Las páginas enteras del revés
+      # las sigue corrigiendo la orientación de documento.
+      OCR_ORIENTACION_RENGLON: "${OCR_ORIENTACION_RENGLON:-false}"
     deploy:
       resources:
         limits:

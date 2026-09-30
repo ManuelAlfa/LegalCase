@@ -211,6 +211,18 @@ OCR_MARGEN_CONFIANZA_MINIMA = float(os.environ.get("OCR_MARGEN_CONFIANZA_MINIMA"
 # procesan fotos de móvil de páginas dobladas, que es para lo que existe.
 OCR_DESALABEO = os.environ.get("OCR_DESALABEO", "false").strip().lower() in ("1", "true", "yes")
 
+# Clasificación de orientación de RENGLÓN de PaddleOCR: gira 180° cada
+# renglón que cree que está boca abajo. Pensada para fotos con texto en
+# varias orientaciones. En escaneos volteaba renglones rectos y los leía del
+# revés, en silencio: en un auto judicial, el renglón con el nombre y los
+# datos del investigado salía como "t ncco co s cco co : anc cciso", y en esa
+# misma página volteó 6 renglones. Medido el 2026-09-30 sobre 10 páginas con
+# verdad de referencia: desactivada, la fidelidad media sube de 96,9% a
+# 98,6%, mejora en 4 páginas y no empeora en ninguna, sin cambio de tiempo.
+# Las páginas enteras del revés las sigue corrigiendo la orientación de
+# DOCUMENTO, que sí se mantiene.
+OCR_ORIENTACION_RENGLON = os.environ.get("OCR_ORIENTACION_RENGLON", "false").strip().lower() in ("1", "true", "yes")
+
 # Resolución a la que se rasteriza cada página PDF antes del OCR.
 #
 # Hasta 2026-09-29 era 300 DPI fijo para todo. Medido ese día con verdad de
@@ -317,7 +329,7 @@ def _inicializar_worker(variante: str) -> None:
 
     modelo_det, modelo_rec = _VARIANTES[variante]
     _motor = PaddleOCR(
-        use_textline_orientation=True,
+        use_textline_orientation=OCR_ORIENTACION_RENGLON,
         # Explícitos, no por defecto (ver OCR_DESALABEO): la orientación del
         # documento corrige páginas escaneadas del revés y casi no cuesta; el
         # desalabeo está pensado para fotos y deforma los escaneos.
