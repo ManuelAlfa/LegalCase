@@ -1,0 +1,208 @@
+@* Menú contextual de un cliente: sus expedientes, documentos y facturas, con
+   acceso directo a la pantalla de cada uno. Se abre con el botón derecho
+   sobre la fila del cliente o con el botón "⋯" de la fila (ver
+   Clientes.razor).
+
+   Los datos se piden al abrir el menú, no al cargar la lista: así la
+   pantalla de Clientes no hace una consulta por cliente que nadie va a
+   mirar. *@
+@using System.Globalization
+@using LegalCaseManagement.Domain.Entities
+@using Web.Services
+@inject ClientesApiClient ClientesApiClient
+@inject NavigationManager Navigation
+
+<div class="cps-ctx-fondo" @onclick="Cerrar" @oncontextmenu="Cerrar" @oncontextmenu:preventDefault="true"></div>
+<div class="cps-ctx" role="menu" tabindex="-1" @ref="_menu" @onkeydown="AlPulsarTecla"
+     aria-label="Elementos relacionados con @Cliente.Nombre" style="@Posicion">
+    <div class="cps-ctx-cabecera">
+        <b>@Cliente.Nombre</b>
+        @if (!string.IsNullOrWhiteSpace(Cliente.DniCif))
+        {
+            <span>@Cliente.DniCif</span>
+        }
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="cps-ctx-vacio">Cargando…</p>
+    }
+    else if (_error is not null)
+    {
+        <p class="cps-ctx-vacio cps-ctx-error">@_error</p>
+    }
+    else if (_datos is not null)
+    {
+        @* ---------- Expedientes ---------- *@
+        <div class="cps-ctx-seccion">
+            <span>Expedientes (@_datos.Expedientes.Count)</span>
+            @if (_datos.Expedientes.Count > 0)
+            {
+                <button type="button" class="cps-ctx-ver-todos" @onclick="VerExpedientes">Ver todos →</button>
+            }
+        </div>
+        @if (_datos.Expedientes.Count == 0)
+        {
+            <p class="cps-ctx-vacio">Sin expedientes.</p>
+        }
+        @foreach (var expediente in _datos.Expedientes.Take(MaximoPorSeccion))
+        {
+            <button type="button" class="cps-ctx-item" role="menuitem" @onclick="() => IrA(RutaExpediente(expediente.Id))">
+                <span class="cps-ctx-principal">
+                    <span class="cps-numero-expediente">@expediente.Numero</span> @expediente.Titulo
+                </span>
+                <span class="cps-chip cps-chip-mini @Presentacion.ClaseChipEstado(expediente.Estado)">
+                    @Presentacion.TextoEstado(expediente.Estado)
+                </span>
+            </button>
+        }
+        @if (_datos.Expedientes.Count > MaximoPorSeccion)
+        {
+            <p class="cps-ctx-mas">y @(_datos.Expedientes.Count - MaximoPorSeccion) más</p>
+        }
+
+        @* ---------- Documentos ---------- *@
+        <div class="cps-ctx-seccion">
+            <span>Documentos (@_datos.Documentos.Count)</span>
+            @if (_datos.Documentos.Count > 0)
+            {
+                <button type="button" class="cps-ctx-ver-todos" @onclick="VerDocumentos">Ver todos →</button>
+            }
+        </div>
+        @if (_datos.Documentos.Count == 0)
+        {
+            <p class="cps-ctx-vacio">Sin documentos.</p>
+        }
+        @foreach (var documento in _datos.Documentos.Take(MaximoPorSeccion))
+        {
+            <button type="button" class="cps-ctx-item" role="menuitem" @onclick="() => IrA(RutaDocumento(documento.Id))">
+                <span class="cps-ctx-principal">
+                    @documento.NombreArchivo
+                    <small>@documento.NumeroExpediente</small>
+                </span>
+                <span class="cps-chip cps-chip-mini @Presentacion.ClaseChipEstadoDocumento(documento.Estado)">
+                    @Presentacion.TextoEstadoDocumento(documento.Estado)
+                </span>
+            </button>
+        }
+        @if (_datos.Documentos.Count > MaximoPorSeccion)
+        {
+            <p class="cps-ctx-mas">y @(_datos.Documentos.Count - MaximoPorSeccion) más</p>
+        }
+
+        @* ---------- Facturas ----------
+           Se enseñan pero no llevan a ningún sitio: la pantalla de
+           facturación todavía no existe. Saber que el cliente tiene
+           facturas, y de qué importe, ya es útil; se dice claramente que no
+           hay más detalle en vez de poner un enlace que no funcione. *@
+        <div class="cps-ctx-seccion">
+            <span>Facturas (@_datos.Facturas.Count)</span>
+        </div>
+        @if (_datos.Facturas.Count == 0)
+        {
+            <p class="cps-ctx-vacio">Sin facturas.</p>
+        }
+        @foreach (var factura in _datos.Facturas.Take(MaximoPorSeccion))
+        {
+            <div class="cps-ctx-item cps-ctx-item-informativo">
+                <span class="cps-ctx-principal">
+                    @factura.Concepto
+                    <small>@factura.NumeroExpediente · @Presentacion.FechaCorta(factura.Fecha) de @factura.Fecha.Year</small>
+                </span>
+                <span class="cps-ctx-importe">@factura.Importe.ToString("C", Presentacion.CulturaEs)</span>
+            </div>
+        }
+        @if (_datos.Facturas.Count > MaximoPorSeccion)
+        {
+            <p class="cps-ctx-mas">y @(_datos.Facturas.Count - MaximoPorSeccion) más</p>
+        }
+        @if (_datos.Facturas.Count > 0)
+        {
+            <p class="cps-ctx-nota">La pantalla de facturación todavía no existe.</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Cliente Cliente { get; set; } = default!;
+
+    /// <summary>Posición del puntero, en píxeles de la ventana.</summary>
+    [Parameter] public double X { get; set; }
+    [Parameter] public double Y { get; set; }
+
+    [Parameter] public EventCallback OnCerrar { get; set; }
+
+    private const int MaximoPorSeccion = 5;
+
+    private ElementReference _menu;
+    private bool _cargando = true;
+    private string? _error;
+    private ClienteRelacionados? _datos;
+    private Guid _clienteCargado;
+
+    // El menú se abre en el puntero, pero sin salirse de la ventana: por la
+    // derecha se recoloca (min con el ancho de la ventana) y por abajo se
+    // limita su altura y se desplaza por dentro. Todo en CSS, sin JavaScript.
+    // Cultura invariante: con la española, 123.5 se escribiría "123,5px" y el
+    // navegador ignoraría la posición.
+    private string Posicion =>
+        string.Create(CultureInfo.InvariantCulture,
+            $"left:min({X:0}px, calc(100vw - 376px)); top:{Y:0}px; max-height:calc(100vh - {Y:0}px - 16px)");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Cliente.Id == _clienteCargado)
+        {
+            return;
+        }
+
+        _clienteCargado = Cliente.Id;
+        _cargando = true;
+        _error = null;
+        try
+        {
+            _datos = await ClientesApiClient.RelacionadosAsync(Cliente.Id);
+            if (_datos is null)
+            {
+                _error = "No se encontró el cliente.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "No se pudieron cargar sus datos. Comprueba que la Api esté en marcha.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool primeraVez)
+    {
+        // El foco va al menú para que Escape lo cierre sin tener que tocar el
+        // ratón.
+        if (primeraVez)
+        {
+            await _menu.FocusAsync();
+        }
+    }
+
+    private static string RutaExpediente(Guid id) => $"/expedientes/{id}";
+
+    private string RutaDocumento(Guid id) => $"/ocr?cliente={Cliente.Id}&documento={id}";
+
+    private Task VerExpedientes() => IrA($"/expedientes?cliente={Cliente.Id}");
+
+    private Task VerDocumentos() => IrA($"/ocr?cliente={Cliente.Id}");
+
+    private async Task IrA(string ruta)
+    {
+        await OnCerrar.InvokeAsync();
+        Navigation.NavigateTo(ruta);
+    }
+
+    private Task Cerrar() => OnCerrar.InvokeAsync();
+
+    private Task AlPulsarTecla(KeyboardEventArgs e) =>
+        e.Key == "Escape" ? Cerrar() : Task.CompletedTask;
+}

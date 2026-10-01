@@ -18,6 +18,44 @@ public static class ClientesEndpoints
                     : Results.NotFound())
             .RequireAuthorization();
 
+        // Todo lo que cuelga de un cliente, para el menú contextual de la
+        // pantalla de Clientes. La relación va a través de sus expedientes:
+        // documentos y facturas pertenecen a un expediente, no al cliente
+        // directamente. Tres consultas en vez de una por expediente.
+        app.MapGet("/api/clientes/{id:guid}/relacionados", async (Guid id, AppDbContext db, CancellationToken ct) =>
+            {
+                if (!await db.Clientes.AnyAsync(c => c.Id == id, ct))
+                    return Results.NotFound();
+
+                var expedientes = await db.Expedientes
+                    .Where(e => e.ClienteId == id)
+                    .OrderByDescending(e => e.FechaApertura)
+                    .Select(e => new ExpedienteRelacionado(e.Id, e.Numero, e.Titulo, e.Estado))
+                    .ToListAsync(ct);
+                var numeros = expedientes.ToDictionary(e => e.Id, e => e.Numero);
+                var ids = numeros.Keys.ToList();
+
+                var documentos = await db.DocumentosAdjuntos
+                    .Where(d => ids.Contains(d.ExpedienteId))
+                    .OrderByDescending(d => d.FechaSubida)
+                    .Select(d => new { d.Id, d.NombreArchivo, d.ExpedienteId, d.EstadoProcesamiento })
+                    .ToListAsync(ct);
+
+                var facturas = await db.Facturas
+                    .Where(f => ids.Contains(f.ExpedienteId))
+                    .OrderByDescending(f => f.Fecha)
+                    .Select(f => new { f.Id, f.Concepto, f.Importe, f.Fecha, f.ExpedienteId })
+                    .ToListAsync(ct);
+
+                return Results.Ok(new ClienteRelacionados(
+                    expedientes,
+                    documentos.Select(d => new DocumentoRelacionado(
+                        d.Id, d.NombreArchivo, d.ExpedienteId, numeros[d.ExpedienteId], d.EstadoProcesamiento)).ToList(),
+                    facturas.Select(f => new FacturaRelacionada(
+                        f.Id, f.Concepto, f.Importe, f.Fecha, f.ExpedienteId, numeros[f.ExpedienteId])).ToList()));
+            })
+            .RequireAuthorization();
+
         app.MapPost("/api/clientes", async (ClienteCreateRequest request, AppDbContext db, ICurrentTenantProvider tenant, CancellationToken ct) =>
             {
                 var errores = new Dictionary<string, string[]>();
@@ -87,3 +125,16 @@ public static class ClientesEndpoints
 public record ClienteCreateRequest(string Nombre, string DniCif, string Email, string Telefono, string CanalPreferido);
 
 public record ClienteUpdateRequest(string? Nombre, string? DniCif, string? Email, string? Telefono, string? CanalPreferido);
+
+public record ClienteRelacionados(
+    IReadOnlyList<ExpedienteRelacionado> Expedientes,
+    IReadOnlyList<DocumentoRelacionado> Documentos,
+    IReadOnlyList<FacturaRelacionada> Facturas);
+
+public record ExpedienteRelacionado(Guid Id, string Numero, string Titulo, EstadoExpediente Estado);
+
+public record DocumentoRelacionado(
+    Guid Id, string NombreArchivo, Guid ExpedienteId, string NumeroExpediente, EstadoProcesamientoDocumento Estado);
+
+public record FacturaRelacionada(
+    Guid Id, string Concepto, decimal Importe, DateTime Fecha, Guid ExpedienteId, string NumeroExpediente);

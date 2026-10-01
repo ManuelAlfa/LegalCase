@@ -36,6 +36,7 @@ else
                 Clientes del despacho
                 <span class="cps-count">@_clientes.Count en total</span>
             </h3>
+            <span class="cps-ayuda">Botón derecho sobre un cliente para ver sus expedientes, documentos y facturas</span>
             <button type="button" class="cps-btn cps-btn-filled cps-btn-sm" @onclick="AbrirDialogoNuevo">
                 <svg class="icon" aria-hidden="true"><use href="#i-users" /></svg>
                 Nuevo cliente
@@ -57,17 +58,30 @@ else
                             <th scope="col">Correo electrónico</th>
                             <th scope="col">Teléfono</th>
                             <th scope="col">Canal preferido</th>
+                            <th scope="col"><span class="cps-visualmente-oculto">Relacionados</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var cliente in _clientes)
                         {
-                            <tr>
+                            @* Botón derecho sobre la fila: menú con sus expedientes,
+                               documentos y facturas. El mismo menú se abre con el
+                               botón "⋯" del final, porque un menú de botón derecho
+                               no se ve y hay que saber que existe. *@
+                            <tr class="cps-fila-con-menu @(_menuCliente?.Id == cliente.Id ? "cps-fila-activa" : "")"
+                                @oncontextmenu="e => AbrirMenu(cliente, e)" @oncontextmenu:preventDefault="true">
                                 <td>@cliente.Nombre</td>
                                 <td class="tabular">@cliente.DniCif</td>
                                 <td>@cliente.Email</td>
                                 <td class="tabular">@cliente.Telefono</td>
                                 <td>@cliente.CanalPreferido</td>
+                                <td class="row-actions">
+                                    <button type="button" class="cps-iconbtn cps-boton-mas"
+                                            title="Expedientes, documentos y facturas de este cliente"
+                                            aria-label="Elementos relacionados con @cliente.Nombre"
+                                            aria-haspopup="menu"
+                                            @onclick="e => AbrirMenu(cliente, e)">⋯</button>
+                                </td>
                             </tr>
                         }
                     </tbody>
@@ -82,11 +96,20 @@ else
     <DialogoNuevoCliente OnCreado="AlCrearCliente" OnCancelar="CerrarDialogo" />
 }
 
+@if (_menuCliente is not null)
+{
+    <MenuContextualCliente Cliente="_menuCliente" X="_menuX" Y="_menuY" OnCerrar="CerrarMenu" />
+}
+
 @code {
     private bool _cargando = true;
     private string? _error;
     private List<Cliente> _clientes = [];
     private bool _dialogoAbierto;
+
+    private Cliente? _menuCliente;
+    private double _menuX;
+    private double _menuY;
 
     protected override async Task OnInitializedAsync()
     {
@@ -116,4 +139,13 @@ else
         _clientes.Add(creado);
         _clientes = [.. _clientes.OrderBy(c => c.Nombre)];
     }
+
+    private void AbrirMenu(Cliente cliente, MouseEventArgs e)
+    {
+        _menuCliente = cliente;
+        _menuX = e.ClientX;
+        _menuY = e.ClientY;
+    }
+
+    private void CerrarMenu() => _menuCliente = null;
 }

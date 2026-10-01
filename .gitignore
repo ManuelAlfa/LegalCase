@@ -96,6 +96,7 @@ node_modules/
 # Capturas y artefactos de las comprobaciones con navegador.
 playwright-report/
 test-results/
+tests/navegador/*.png
 
 # =====================================================================
 # Empaquetados y volcados generados del propio proyecto

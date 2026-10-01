@@ -21,6 +21,7 @@
 @inject DocumentosApiClient DocumentosApiClient
 @inject ExpedientesApiClient ExpedientesApiClient
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <PageTitle>Documentos y OCR — Compás</PageTitle>
 
@@ -83,6 +84,15 @@
     }
 </div>
 
+@if (ClienteFiltro is not null)
+{
+    @* Viene del menú contextual de Clientes. *@
+    <div class="cps-filtro-activo">
+        Documentos de <b>@NombreClienteFiltro</b>
+        <button type="button" class="cps-btn cps-btn-text cps-btn-sm" @onclick="QuitarFiltroCliente">Quitar filtro</button>
+    </div>
+}
+
 <div class="cps-dos-columnas">
     <div class="cps-card">
         <div class="cps-list-toolbar">
@@ -142,7 +152,7 @@
                     <tbody>
                         @foreach (var documento in Filtrados)
                         {
-                            <tr>
+                            <tr class="@(documento.Id == DocumentoDestacado ? "cps-fila-destacada" : "")">
                                 <td><span class="cps-chip cps-chip-default">@Extension(documento.NombreArchivo)</span></td>
                                 <td>
                                     <b>@documento.NombreArchivo</b>
@@ -360,8 +370,27 @@
         }
     }
 
+    /// <summary>Solo los documentos de los expedientes de este cliente (?cliente=...).</summary>
+    [SupplyParameterFromQuery(Name = "cliente")]
+    public Guid? ClienteFiltro { get; set; }
+
+    /// <summary>Documento a resaltar en la tabla (?documento=...).</summary>
+    [SupplyParameterFromQuery(Name = "documento")]
+    public Guid? DocumentoDestacado { get; set; }
+
+    private string NombreClienteFiltro =>
+        _expedientes.FirstOrDefault(e => e.ClienteId == ClienteFiltro)?.Cliente ?? "este cliente";
+
+    private void QuitarFiltroCliente() => Navigation.NavigateTo("/ocr");
+
     private bool Coincide(DocumentoResumen documento)
     {
+        if (ClienteFiltro is { } clienteId
+            && _expedientes.FirstOrDefault(e => e.Id == documento.ExpedienteId)?.ClienteId != clienteId)
+        {
+            return false;
+        }
+
         if (Guid.TryParse(_filtroExpediente, out var expedienteId)
             && documento.ExpedienteId != expedienteId)
         {

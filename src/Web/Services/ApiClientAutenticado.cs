@@ -51,6 +51,33 @@ public abstract class ApiClientAutenticado(HttpClient http, TokenProvider tokenP
         return await respuesta.Content.ReadFromJsonAsync<List<T>>(cancellationToken: ct) ?? [];
     }
 
+    /// <summary>Un único objeto. Devuelve null si no existe (404).</summary>
+    protected async Task<T?> ObtenerAsync<T>(string ruta, CancellationToken ct) where T : class
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Get, ruta);
+
+        if (tokenProvider.AccessToken is { } token)
+        {
+            peticion.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        using var respuesta = await http.SendAsync(peticion, ct);
+
+        if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            tokenProvider.CerrarSesion();
+            return null;
+        }
+
+        if (respuesta.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        respuesta.EnsureSuccessStatusCode();
+        return await respuesta.Content.ReadFromJsonAsync<T>(cancellationToken: ct);
+    }
+
     /// <summary>
     /// POST de un formulario. Distingue tres desenlaces, porque la pantalla
     /// tiene que reaccionar distinto a cada uno: creado, rechazado por

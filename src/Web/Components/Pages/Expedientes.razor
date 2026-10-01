@@ -27,8 +27,16 @@ else if (_error is not null)
 }
 else
 {
-    <TablaExpedientes Titulo="Todos los expedientes"
-                      Expedientes="_expedientes"
+    @if (ClienteFiltro is not null)
+    {
+        @* Viene del menú contextual de Clientes ("Ver todos"). *@
+        <div class="cps-filtro-activo">
+            Expedientes de <b>@NombreClienteFiltro</b>
+            <button type="button" class="cps-btn cps-btn-text cps-btn-sm" @onclick="QuitarFiltroCliente">Quitar filtro</button>
+        </div>
+    }
+    <TablaExpedientes Titulo="@(ClienteFiltro is null ? "Todos los expedientes" : "Expedientes del cliente")"
+                      Expedientes="ExpedientesVisibles"
                       MateriasPorId="_materiasPorId"
                       AbogadosPorId="_abogadosPorId"
                       OnSeleccionar="AbrirExpediente"
@@ -47,6 +55,18 @@ else
     private Dictionary<Guid, Materia> _materiasPorId = [];
     private Dictionary<Guid, UsuarioResumen> _abogadosPorId = [];
     private bool _dialogoAbierto;
+
+    /// <summary>Solo los expedientes de este cliente (?cliente=...).</summary>
+    [SupplyParameterFromQuery(Name = "cliente")]
+    public Guid? ClienteFiltro { get; set; }
+
+    private List<Expediente> ExpedientesVisibles =>
+        ClienteFiltro is { } id ? [.. _expedientes.Where(e => e.ClienteId == id)] : _expedientes;
+
+    private string NombreClienteFiltro =>
+        _expedientes.FirstOrDefault(e => e.ClienteId == ClienteFiltro)?.Cliente ?? "este cliente";
+
+    private void QuitarFiltroCliente() => Navigation.NavigateTo("/expedientes");
 
     protected override async Task OnInitializedAsync()
     {
