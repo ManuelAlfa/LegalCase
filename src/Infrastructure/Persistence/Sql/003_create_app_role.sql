@@ -39,7 +39,8 @@ GRANT USAGE ON SCHEMA public TO legalcase_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
     tenants, expedientes, clientes, partes_contrarias, materias, plazos,
     documentos_adjuntos, provisiones_de_fondos, facturas, usuarios,
-    fragmentos_documento, entidades_extraidas, eventos_cronologia
+    fragmentos_documento, entidades_extraidas, eventos_cronologia,
+    registro_horas, exportaciones_gestoria
 TO legalcase_app;
 
 -- audit_logs es la excepción ya documentada en

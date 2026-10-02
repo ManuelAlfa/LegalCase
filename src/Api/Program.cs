@@ -1,3 +1,4 @@
+using LegalCaseManagement.Infrastructure.Auditing;
 using System.Text;
 using LegalCaseManagement.Api.Auth;
 using LegalCaseManagement.Api.Endpoints;
@@ -59,7 +60,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(opciones =>
+    opciones.AddPolicy(Politicas.GestionFacturacion, politica =>
+        politica.RequireClaim(TenantClaimTypes.Rol, nameof(RolUsuario.Socio), nameof(RolUsuario.Administrativo))));
+builder.Services.AddScoped<UsuarioActual>();
+builder.Services.AddScoped<AuditLogHasher>();
+builder.Services.AddScoped<RegistroAuditoria>();
 
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
     options.UseNpgsql(
@@ -118,6 +124,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapExpedientesEndpoints();
+app.MapFacturacionEndpoints();
 app.MapClientesEndpoints();
 app.MapPartesContrariasEndpoints();
 app.MapMateriasEndpoints();

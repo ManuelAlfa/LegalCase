@@ -90,7 +90,9 @@ public static class ClientesEndpoints
                     DniCif = request.DniCif.Trim(),
                     Email = request.Email.Trim(),
                     Telefono = request.Telefono.Trim(),
-                    CanalPreferido = request.CanalPreferido
+                    CanalPreferido = request.CanalPreferido,
+                    Domicilio = string.IsNullOrWhiteSpace(request.Domicilio) ? null : request.Domicilio.Trim(),
+                    TipoCliente = request.TipoCliente
                 };
 
                 db.Clientes.Add(cliente);
@@ -111,6 +113,8 @@ public static class ClientesEndpoints
                 if (request.Email is not null) cliente.Email = request.Email;
                 if (request.Telefono is not null) cliente.Telefono = request.Telefono;
                 if (request.CanalPreferido is not null) cliente.CanalPreferido = request.CanalPreferido;
+                if (request.Domicilio is not null) cliente.Domicilio = request.Domicilio.Trim();
+                if (request.TipoCliente is not null) cliente.TipoCliente = request.TipoCliente.Value;
 
                 await db.SaveChangesAsync();
 
@@ -122,9 +126,11 @@ public static class ClientesEndpoints
     }
 }
 
-public record ClienteCreateRequest(string Nombre, string DniCif, string Email, string Telefono, string CanalPreferido);
+public record ClienteCreateRequest(string Nombre, string DniCif, string Email, string Telefono, string CanalPreferido,
+    string? Domicilio = null, TipoCliente TipoCliente = TipoCliente.Particular);
 
-public record ClienteUpdateRequest(string? Nombre, string? DniCif, string? Email, string? Telefono, string? CanalPreferido);
+public record ClienteUpdateRequest(string? Nombre, string? DniCif, string? Email, string? Telefono, string? CanalPreferido,
+    string? Domicilio = null, TipoCliente? TipoCliente = null);
 
 public record ClienteRelacionados(
     IReadOnlyList<ExpedienteRelacionado> Expedientes,

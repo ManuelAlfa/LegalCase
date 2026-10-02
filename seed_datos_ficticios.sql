@@ -87,12 +87,15 @@ INSERT INTO usuarios (id, tenant_id, nombre, email, password_hash, rol) VALUES
 -- familia) — se siembra una sola fila de Cliente y se referencia desde
 -- los dos expedientes, tal como haría un despacho real.
 -- ---------------------------------------------------------------------
-INSERT INTO clientes (id, tenant_id, nombre, dni_cif, email, telefono, canal_preferido) VALUES
-  ('00000000-0000-0000-0000-000000003001', '00000000-0000-0000-0000-000000000001', 'Antonio Rodríguez Marín',            '22334455C', 'antonio.rodriguezm@correo-ficticio.es', '611223344', 'Email'),
-  ('00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000000001', 'Beatriz García Serrano',             '33445566D', 'beatriz.garcias@correo-ficticio.es',    '622334455', 'WhatsApp'),
-  ('00000000-0000-0000-0000-000000003003', '00000000-0000-0000-0000-000000000001', 'José Martín Cobo',                   '44556677E', 'jose.martinc@correo-ficticio.es',        '633445566', 'Teléfono'),
-  ('00000000-0000-0000-0000-000000003004', '00000000-0000-0000-0000-000000000001', 'Comunidad de Propietarios Ronda Sur 12', 'H12345678', 'administracion@rondasur12-ficticio.es', '644556677', 'Email'),
-  ('00000000-0000-0000-0000-000000003005', '00000000-0000-0000-0000-000000000001', 'Marina Hidalgo Torres',              '55667788F', 'marina.hidalgot@correo-ficticio.es',     '655667788', 'WhatsApp');
+-- domicilio y tipo_cliente (D.5): los necesita la gestoría para emitir la
+-- factura y decidir retenciones. tipo_cliente: 0 Particular, 1 Empresario o
+-- profesional, 2 Entidad.
+INSERT INTO clientes (id, tenant_id, nombre, dni_cif, email, telefono, canal_preferido, domicilio, tipo_cliente) VALUES
+  ('00000000-0000-0000-0000-000000003001', '00000000-0000-0000-0000-000000000001', 'Antonio Rodríguez Marín',            '22334455C', 'antonio.rodriguezm@correo-ficticio.es', '611223344', 'Email', 'C/ Colón 14, 3.º B, 46004 Valencia', 0),
+  ('00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000000001', 'Beatriz García Serrano',             '33445566D', 'beatriz.garcias@correo-ficticio.es',    '622334455', 'WhatsApp', 'Av. del Puerto 120, 2.º, 46023 Valencia', 0),
+  ('00000000-0000-0000-0000-000000003003', '00000000-0000-0000-0000-000000000001', 'José Martín Cobo',                   '44556677E', 'jose.martinc@correo-ficticio.es',        '633445566', 'Teléfono', 'Pol. Ind. Fuente del Jarro, C/ Ciudad de Sevilla 8, 46988 Paterna', 1),
+  ('00000000-0000-0000-0000-000000003004', '00000000-0000-0000-0000-000000000001', 'Comunidad de Propietarios Ronda Sur 12', 'H12345678', 'administracion@rondasur12-ficticio.es', '644556677', 'Email', 'C/ Ronda Sur 12, 46013 Valencia', 2),
+  ('00000000-0000-0000-0000-000000003005', '00000000-0000-0000-0000-000000000001', 'Marina Hidalgo Torres',              '55667788F', 'marina.hidalgot@correo-ficticio.es',     '655667788', 'WhatsApp', 'C/ Sueca 41, 1.º, 46006 Valencia', 0);
 
 -- ---------------------------------------------------------------------
 -- Expedientes: los 6 ya validados visualmente en el mockup, con el mismo
@@ -107,13 +110,14 @@ INSERT INTO clientes (id, tenant_id, nombre, dni_cif, email, telefono, canal_pre
 -- ---------------------------------------------------------------------
 -- El numero ya no vive dentro del titulo: tiene su propia columna, unica
 -- dentro del despacho. El titulo queda como asunto del expediente.
-INSERT INTO expedientes (id, tenant_id, numero, titulo, cliente, estado, fecha_apertura, fecha_cierre, cliente_id, materia_id, abogado_responsable_id, ultimo_folio) VALUES
-  ('00000000-0000-0000-0000-000000005001', '00000000-0000-0000-0000-000000000001', '2026/0143', 'Rodríguez Marín vs. Ayuntamiento de Valencia', 'Antonio Rodríguez Marín',            0, '2026-06-02T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003001', '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-000000002001', 0),
-  ('00000000-0000-0000-0000-000000005002', '00000000-0000-0000-0000-000000000001', '2026/0139', 'García Serrano (despido)',                     'Beatriz García Serrano',             1, '2026-07-10T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000001002', '00000000-0000-0000-0000-000000002002', 0),
-  ('00000000-0000-0000-0000-000000005003', '00000000-0000-0000-0000-000000000001', '2026/0151', 'García Serrano (custodia y régimen de visitas)', 'Beatriz García Serrano',           0, '2026-09-08T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000001003', '00000000-0000-0000-0000-000000002001', 0),
-  ('00000000-0000-0000-0000-000000005004', '00000000-0000-0000-0000-000000000001', '2026/0132', 'Martín Cobo (reclamación de cantidad)',        'José Martín Cobo',                   1, '2026-05-20T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003003', '00000000-0000-0000-0000-000000001004', '00000000-0000-0000-0000-000000002003', 0),
-  ('00000000-0000-0000-0000-000000005005', '00000000-0000-0000-0000-000000000001', '2026/0128', 'Comunidad Propietarios Ronda Sur 12',           'Comunidad de Propietarios Ronda Sur 12', 0, '2026-03-11T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003004', '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-000000002002', 0),
-  ('00000000-0000-0000-0000-000000005006', '00000000-0000-0000-0000-000000000001', '2026/0091', 'Hidalgo Torres (extranjería)',                  'Marina Hidalgo Torres',              3, '2025-11-04T09:00:00Z', '2026-08-01T09:00:00Z', '00000000-0000-0000-0000-000000003005', '00000000-0000-0000-0000-000000001005', '00000000-0000-0000-0000-000000002003', 0);
+-- tarifa_hora (D.5): solo el 2026/0143 se factura por horas, a 85 €/h.
+INSERT INTO expedientes (id, tenant_id, numero, titulo, cliente, estado, fecha_apertura, fecha_cierre, cliente_id, materia_id, abogado_responsable_id, ultimo_folio, tarifa_hora) VALUES
+  ('00000000-0000-0000-0000-000000005001', '00000000-0000-0000-0000-000000000001', '2026/0143', 'Rodríguez Marín vs. Ayuntamiento de Valencia', 'Antonio Rodríguez Marín',            0, '2026-06-02T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003001', '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-000000002001', 0, 85.00),
+  ('00000000-0000-0000-0000-000000005002', '00000000-0000-0000-0000-000000000001', '2026/0139', 'García Serrano (despido)',                     'Beatriz García Serrano',             1, '2026-07-10T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000001002', '00000000-0000-0000-0000-000000002002', 0, NULL),
+  ('00000000-0000-0000-0000-000000005003', '00000000-0000-0000-0000-000000000001', '2026/0151', 'García Serrano (custodia y régimen de visitas)', 'Beatriz García Serrano',           0, '2026-09-08T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003002', '00000000-0000-0000-0000-000000001003', '00000000-0000-0000-0000-000000002001', 0, NULL),
+  ('00000000-0000-0000-0000-000000005004', '00000000-0000-0000-0000-000000000001', '2026/0132', 'Martín Cobo (reclamación de cantidad)',        'José Martín Cobo',                   1, '2026-05-20T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003003', '00000000-0000-0000-0000-000000001004', '00000000-0000-0000-0000-000000002003', 0, NULL),
+  ('00000000-0000-0000-0000-000000005005', '00000000-0000-0000-0000-000000000001', '2026/0128', 'Comunidad Propietarios Ronda Sur 12',           'Comunidad de Propietarios Ronda Sur 12', 0, '2026-03-11T09:00:00Z', NULL, '00000000-0000-0000-0000-000000003004', '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-000000002002', 0, NULL),
+  ('00000000-0000-0000-0000-000000005006', '00000000-0000-0000-0000-000000000001', '2026/0091', 'Hidalgo Torres (extranjería)',                  'Marina Hidalgo Torres',              3, '2025-11-04T09:00:00Z', '2026-08-01T09:00:00Z', '00000000-0000-0000-0000-000000003005', '00000000-0000-0000-0000-000000001005', '00000000-0000-0000-0000-000000002003', 0, NULL);
 
 -- ---------------------------------------------------------------------
 -- Partes contrarias: una por expediente activo (se omite en 0151, donde
@@ -157,12 +161,16 @@ INSERT INTO provisiones_de_fondos (id, tenant_id, expediente_id, importe, fecha_
 -- facturar todavía, igual que en el mockup). 0132 se deja sin ninguna
 -- factura (coherente con "pendiente de documentación, cero facturas").
 -- ---------------------------------------------------------------------
-INSERT INTO facturas (id, tenant_id, expediente_id, concepto, importe, fecha, modo) VALUES
-  ('00000000-0000-0000-0000-000000008001', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005001', 'Honorarios por horas — julio 2026 (10 h a 85 €/h)',   850.00,  '2026-08-03T09:00:00Z', 1),
-  ('00000000-0000-0000-0000-000000008002', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005001', 'Honorarios por horas — agosto 2026 (9 h a 85 €/h)',    765.00, '2026-09-03T09:00:00Z', 1),
-  ('00000000-0000-0000-0000-000000008003', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005002', 'Honorarios despido improcedente — tanto alzado',       950.00, '2026-07-15T09:00:00Z', 0),
-  ('00000000-0000-0000-0000-000000008004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005005', 'Honorarios Comunidad de Propietarios Ronda Sur 12',   1200.00, '2026-04-02T09:00:00Z', 0),
-  ('00000000-0000-0000-0000-000000008005', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005006', 'Honorarios expediente extranjería — liquidación final', 450.00, '2026-08-01T09:00:00Z', 0);
+-- Desde D.5 una "factura" es un concepto facturable; estos son conceptos que
+-- la gestoría ya facturó (estado 2 = EmitidaPorGestoria), con el número, la
+-- fecha y el total que anotó el despacho al recibir su factura. Datos
+-- ficticios: Compás no calcula impuestos, el total lo da la gestoría.
+INSERT INTO facturas (id, tenant_id, expediente_id, concepto, importe, fecha, modo, estado, numero_factura_gestoria, fecha_emision_gestoria, total_factura_gestoria) VALUES
+  ('00000000-0000-0000-0000-000000008001', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005001', 'Honorarios por horas — julio 2026 (10 h a 85 €/h)',   850.00,  '2026-08-03T09:00:00Z', 1, 2, 'G-2026/0298', '2026-08-05T09:00:00Z', 1028.50),
+  ('00000000-0000-0000-0000-000000008002', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005001', 'Honorarios por horas — agosto 2026 (9 h a 85 €/h)',    765.00, '2026-09-03T09:00:00Z', 1, 2, 'G-2026/0371', '2026-09-05T09:00:00Z', 925.65),
+  ('00000000-0000-0000-0000-000000008003', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005002', 'Honorarios despido improcedente — tanto alzado',       950.00, '2026-07-15T09:00:00Z', 0, 2, 'G-2026/0255', '2026-07-17T09:00:00Z', 1149.50),
+  ('00000000-0000-0000-0000-000000008004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005005', 'Honorarios Comunidad de Propietarios Ronda Sur 12',   1200.00, '2026-04-02T09:00:00Z', 0, 2, 'G-2026/0118', '2026-04-06T09:00:00Z', 1452.00),
+  ('00000000-0000-0000-0000-000000008005', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000005006', 'Honorarios expediente extranjería — liquidación final', 450.00, '2026-08-01T09:00:00Z', 0, 2, 'G-2026/0290', '2026-08-03T09:00:00Z', 544.50);
 
 COMMIT;
 

@@ -45,6 +45,12 @@ public class Expediente : ITenantEntity
     // recién abierto puede estar todavía sin asignar.
     public Guid? AbogadoResponsableId { get; set; }
 
+    /// <summary>
+    /// Tarifa por hora por defecto del expediente (modalidad por horas, D.5):
+    /// se propone al registrar horas. Null si no se factura por horas.
+    /// </summary>
+    public decimal? TarifaHora { get; set; }
+
     // Contador atómico para asignar rangos de folio (Bates) a los
     // DocumentoAdjunto del expediente sin colisiones entre documentos
     // procesados en paralelo (ver DocumentoSubidoConsumer): se incrementa

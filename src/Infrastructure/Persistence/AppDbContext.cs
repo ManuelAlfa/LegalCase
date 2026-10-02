@@ -21,6 +21,8 @@ public class AppDbContext : DbContext
     public DbSet<Plazo> Plazos => Set<Plazo>();
     public DbSet<ProvisionDeFondos> ProvisionesDeFondos => Set<ProvisionDeFondos>();
     public DbSet<Factura> Facturas => Set<Factura>();
+    public DbSet<RegistroHoras> RegistrosHoras => Set<RegistroHoras>();
+    public DbSet<ExportacionGestoria> ExportacionesGestoria => Set<ExportacionGestoria>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<DocumentoAdjunto> DocumentosAdjuntos => Set<DocumentoAdjunto>();
     public DbSet<FragmentoDocumento> FragmentosDocumento => Set<FragmentoDocumento>();
@@ -48,6 +50,7 @@ public class AppDbContext : DbContext
             b.HasIndex(e => e.ClienteId);
             b.HasIndex(e => e.MateriaId);
             b.HasIndex(e => e.AbogadoResponsableId);
+            b.Property(e => e.TarifaHora).HasPrecision(10, 2);
 
             // Único DENTRO del despacho, no globalmente: dos despachos
             // distintos pueden tener cada uno su expediente 2026/0001. Es
@@ -108,6 +111,30 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Factura>(b =>
         {
             b.ToTable("facturas");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.TenantId);
+            b.HasIndex(x => x.ExpedienteId);
+            b.Property(x => x.Importe).HasPrecision(12, 2);
+            b.Property(x => x.TotalFacturaGestoria).HasPrecision(12, 2);
+            b.Property(x => x.NumeroFacturaGestoria).HasMaxLength(64);
+            b.HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+        });
+
+        modelBuilder.Entity<RegistroHoras>(b =>
+        {
+            b.ToTable("registro_horas");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.TenantId);
+            b.HasIndex(x => x.ExpedienteId);
+            b.HasIndex(x => x.FacturaId);
+            b.Property(x => x.Horas).HasPrecision(7, 2);
+            b.Property(x => x.TarifaHora).HasPrecision(10, 2);
+            b.HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+        });
+
+        modelBuilder.Entity<ExportacionGestoria>(b =>
+        {
+            b.ToTable("exportaciones_gestoria");
             b.HasKey(x => x.Id);
             b.HasIndex(x => x.TenantId);
             b.HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
