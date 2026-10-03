@@ -273,6 +273,10 @@ services:
       # OCR_ORIENTACION_RENGLON en main.py). Las páginas enteras del revés
       # las sigue corrigiendo la orientación de documento.
       OCR_ORIENTACION_RENGLON: "${OCR_ORIENTACION_RENGLON:-false}"
+      # Puntuación mínima para leer una caja del detector. Con el 0.6 de
+      # PaddleOCR, en escaneos borrosos se perdían renglones enteros sin
+      # avisar (ver OCR_DET_UMBRAL_CAJA en main.py).
+      OCR_DET_UMBRAL_CAJA: "${OCR_DET_UMBRAL_CAJA:-0.4}"
     deploy:
       resources:
         limits:

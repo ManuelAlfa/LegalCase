@@ -223,6 +223,18 @@ OCR_DESALABEO = os.environ.get("OCR_DESALABEO", "false").strip().lower() in ("1"
 # DOCUMENTO, que sí se mantiene.
 OCR_ORIENTACION_RENGLON = os.environ.get("OCR_ORIENTACION_RENGLON", "false").strip().lower() in ("1", "true", "yes")
 
+# Puntuación mínima de una caja del detector para leerla (text_det_box_thresh
+# de PaddleOCR, 0.6 por defecto). En escaneos borrosos los renglones de en
+# medio de un párrafo puntúan algo menos que el primero y el último, y con
+# 0.6 se descartaban enteros: medido el 2026-10-03, una página de prosa del
+# BOE degradado perdía 2/3 del texto (fidelidad 37,7%) con confianza 0,991,
+# porque la confianza solo mide lo que sí se lee. Comparados 0.6/0.5/0.4/0.3
+# sobre las 65 páginas del banco de degradado (pruebas/curva_degradacion.py):
+# con 0.4 mejoran 18 páginas (esa, de 21% a 73% de palabras), no empeora
+# ninguna, el original limpio queda igual y el tiempo apenas cambia; 0.3 ya
+# no gana nada y baja la confianza de lo leído.
+OCR_DET_UMBRAL_CAJA = float(os.environ.get("OCR_DET_UMBRAL_CAJA", "0.4"))
+
 # Resolución a la que se rasteriza cada página PDF antes del OCR.
 #
 # Hasta 2026-09-29 era 300 DPI fijo para todo. Medido ese día con verdad de
@@ -335,6 +347,7 @@ def _inicializar_worker(variante: str) -> None:
         # desalabeo está pensado para fotos y deforma los escaneos.
         use_doc_orientation_classify=True,
         use_doc_unwarping=OCR_DESALABEO,
+        text_det_box_thresh=OCR_DET_UMBRAL_CAJA,
         # SIN lang="es": con paddleocr==3.0.0, fijar `lang` junto con un
         # text_detection_model_name/text_recognition_model_name
         # explícito hace que PaddleX ignore en silencio el modelo pedido

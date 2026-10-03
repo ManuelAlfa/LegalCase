@@ -67,6 +67,7 @@ modelo_det, modelo_rec = main._VARIANTES["mobile"]
 resultados = {}
 for nombre, config in (("producción", PRODUCCION), ("variante", VARIANTE)):
     main._motor = PaddleOCR(text_detection_model_name=modelo_det, text_recognition_model_name=modelo_rec,
+                            text_det_box_thresh=main.OCR_DET_UMBRAL_CAJA,
                             cpu_threads=main.OCR_HILOS_POR_PROCESO, **config)
     main._motor.predict(np.full((800, 600, 3), 255, dtype=np.uint8))
     for estado, imgs in imagenes.items():
